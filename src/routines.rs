@@ -1592,7 +1592,7 @@ mod tests {
             &connection,
             &draft(
                 RoutineSchedule::Weekdays {
-                    weekday_mask: 0b000_0010,
+                    weekday_mask: 0b000_0001,
                 },
                 vec![action("Read", true)],
             ),
