@@ -865,7 +865,11 @@ fn refresh_milestone_list(
             );
         });
 
-        let skip = gtk::Button::with_label(if milestone.status == "skipped" { "Reopen" } else { "Skip" });
+        let skip = gtk::Button::with_label(if milestone.status == "skipped" {
+            "Reopen"
+        } else {
+            "Skip"
+        });
         let skip_connection = Rc::clone(connection);
         let skip_list = list.clone();
         let skip_parent = parent.clone();
