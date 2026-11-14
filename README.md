@@ -32,6 +32,14 @@ A privacy-first, offline-first native habit and personal productivity app for Li
 - Skipped milestones are excluded from the progress denominator and displayed separately.
 - Existing goal and habit-link records are preserved by an additive milestone migration.
 
+### Routine Builder (M5)
+- Create daily or selected-weekday routines with an ordered checklist of 1–40 steps.
+- Use action steps or link an existing habit; steps may be required or optional.
+- Reorder template steps, pause/resume/archive routines and run once per local date.
+- Complete, skip or reopen run steps and review saved run history.
+- Daily-run snapshots preserve the original step titles and order even when the template changes.
+- Routine links are organizational only; they never silently create habit check-ins or change scores.
+
 ### Local data portability (M6)
 Build the companion CLI with the application:
 
@@ -89,6 +97,7 @@ If neither path is an absolute usable location, the app refuses to place persona
 - [Engineering status and release blockers](docs/ENGINEERING_STATUS.md)
 - [M3 schedule integration](docs/M3_SCHEDULE_INTEGRATION.md)
 - [Goals and milestones](docs/M5_GOALS_MILESTONES.md)
+- [Routine Builder](docs/M5_ROUTINE_BUILDER.md)
 - [Scoring policy](docs/SCORING_POLICY.md)
 - [Data portability](docs/DATA_PORTABILITY.md)
 

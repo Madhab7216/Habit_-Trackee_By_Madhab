@@ -1,6 +1,7 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod routines;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
@@ -63,6 +64,14 @@ fn build_ui(application: &Application) {
         goals::open_window(&goals_parent, Rc::clone(&goals_connection));
     });
     header.pack_end(&goals_button);
+
+    let routines_button = Button::with_label("Routines");
+    let routines_parent = window.clone();
+    let routines_connection = Rc::clone(&state.connection);
+    routines_button.connect_clicked(move |_| {
+        routines::open_window(&routines_parent, Rc::clone(&routines_connection));
+    });
+    header.pack_end(&routines_button);
     window.set_titlebar(Some(&header));
 
     let page = gtk::Box::new(Orientation::Vertical, 14);

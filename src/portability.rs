@@ -26,6 +26,10 @@ const EXPORT_TABLES: &[&str] = &[
     "goals",
     "goal_habits",
     "goal_milestones",
+    "routines",
+    "routine_steps",
+    "routine_runs",
+    "routine_run_steps",
     "settings",
 ];
 
@@ -132,6 +136,51 @@ pub fn verify_database(connection: &Connection) -> PortabilityResult<i64> {
                 "database is missing required table {required_table}"
             ))
             .into());
+        }
+    }
+
+    let has_routine_ledger: bool = connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM sqlite_master
+            WHERE type = 'table' AND name = 'routine_schema_migrations'
+        )",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_routine_ledger {
+        let routine_version: i64 = connection.query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM routine_schema_migrations",
+            [],
+            |row| row.get(0),
+        )?;
+        if routine_version > 1 {
+            return Err(invalid_data(format!(
+                "unsupported routine schema version {routine_version}"
+            ))
+            .into());
+        }
+        if routine_version >= 1 {
+            for required_table in [
+                "routines",
+                "routine_steps",
+                "routine_runs",
+                "routine_run_steps",
+            ] {
+                let exists: bool = connection.query_row(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM sqlite_master
+                        WHERE type = 'table' AND name = ?1
+                    )",
+                    [required_table],
+                    |row| row.get(0),
+                )?;
+                if !exists {
+                    return Err(invalid_data(format!(
+                        "routine schema is missing required table {required_table}"
+                    ))
+                    .into());
+                }
+            }
         }
     }
 
@@ -478,6 +527,50 @@ mod tests {
             .expect("insert setting");
 
         connection
+            .execute_batch(
+                "CREATE TABLE routine_schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                 );",
+            )
+            .expect("create routine migration ledger");
+        connection
+            .execute_batch(include_str!("../migrations/0004_routines.sql"))
+            .expect("apply routine schema");
+        connection
+            .execute(
+                "INSERT INTO routine_schema_migrations(version) VALUES (1)",
+                [],
+            )
+            .expect("record routine schema version");
+        connection
+            .execute(
+                "INSERT INTO routines(title, start_date) VALUES ('Morning focus', '2026-11-14')",
+                [],
+            )
+            .expect("insert routine");
+        connection
+            .execute(
+                "INSERT INTO routine_steps(routine_id, title, sort_order) VALUES (1, 'Drink water', 0)",
+                [],
+            )
+            .expect("insert routine step");
+        connection
+            .execute(
+                "INSERT INTO routine_runs(routine_id, local_date, status) VALUES (1, '2026-11-14', 'completed')",
+                [],
+            )
+            .expect("insert routine run");
+        connection
+            .execute(
+                "INSERT INTO routine_run_steps
+                    (run_id, step_id, title_snapshot, step_type_snapshot, is_required, sort_order, status)
+                 VALUES (1, 1, 'Drink water', 'action', 1, 0, 'completed')",
+                [],
+            )
+            .expect("insert routine run step");
+
+        connection
     }
 
     #[test]
@@ -510,12 +603,22 @@ mod tests {
         let milestone_count: i64 = restored
             .query_row("SELECT COUNT(*) FROM goal_milestones", [], |row| row.get(0))
             .expect("count restored goal milestones");
+        let routine_count: i64 = restored
+            .query_row("SELECT COUNT(*) FROM routines", [], |row| row.get(0))
+            .expect("count restored routines");
+        let routine_run_step_count: i64 = restored
+            .query_row("SELECT COUNT(*) FROM routine_run_steps", [], |row| {
+                row.get(0)
+            })
+            .expect("count restored routine run steps");
 
         assert_eq!(habit_name, "Drink \"water\", slowly\nand consistently");
         assert_eq!(entry_count, 1);
         assert_eq!(pause_count, 1);
         assert_eq!(goal_count, 1);
         assert_eq!(milestone_count, 1);
+        assert_eq!(routine_count, 1);
+        assert_eq!(routine_run_step_count, 1);
         drop(restored);
 
         fs::remove_file(backup_path).expect("remove test backup");
@@ -586,6 +689,10 @@ mod tests {
             "habit_tag_links.csv",
             "goals.csv",
             "goal_habits.csv",
+            "routines.csv",
+            "routine_steps.csv",
+            "routine_runs.csv",
+            "routine_run_steps.csv",
             "settings.csv",
         ] {
             assert!(destination.join(filename).is_file(), "missing {filename}");

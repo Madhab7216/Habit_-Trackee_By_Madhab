@@ -19,7 +19,8 @@ cargo run --bin madhab-data-tool -- export-csv "$HOME/Documents/Madhab-Habit-Exp
 - Existing output files and directories are not overwritten.
 - On Unix, backup files and export files are owner-readable/writable only (0600); export directories are owner-only (0700).
 - Failed operations remove incomplete outputs.
-- Export covers the supported habit, pause, tag, goal, milestone and settings tables when they exist.
+- Export covers habit, pause, tag, goal, milestone, routine-template and routine-run tables when they exist.
+- A routine migration ledger is checked when present; verified older databases without routines remain supported.
 
 ## Scope boundary
 
