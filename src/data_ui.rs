@@ -168,8 +168,7 @@ pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection
                 set_status(&status, "No valid backup destination was selected.", false);
                 return;
             };
-            let result =
-                portability::create_verified_backup(&connection.borrow(), &destination);
+            let result = portability::create_verified_backup(&connection.borrow(), &destination);
             show_operation_result(&status, "Backup created and verified.", result);
         });
         dialog.show();
@@ -277,11 +276,14 @@ pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection
                 return;
             }
             let Some(destination) = selected_path(dialog) else {
-                set_status(&status, "No valid CSV export destination was selected.", false);
+                set_status(
+                    &status,
+                    "No valid CSV export destination was selected.",
+                    false,
+                );
                 return;
             };
-            let result =
-                portability::export_csv_bundle(&mut connection.borrow_mut(), &destination);
+            let result = portability::export_csv_bundle(&mut connection.borrow_mut(), &destination);
             show_operation_result(&status, "CSV export created successfully.", result);
         });
         dialog.show();
