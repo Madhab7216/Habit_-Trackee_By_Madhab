@@ -12,7 +12,8 @@ pub struct TodayHabit {
 }
 
 pub fn open() -> Result<Connection> {
-    let data_dir = data_directory();
+    let data_dir = data_directory()
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     fs::create_dir_all(&data_dir)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
 
@@ -23,17 +24,31 @@ pub fn open() -> Result<Connection> {
     Ok(connection)
 }
 
-fn data_directory() -> PathBuf {
-    if let Some(xdg_data_home) = env::var_os("XDG_DATA_HOME") {
-        return PathBuf::from(xdg_data_home).join("madhab-habit-tracker");
+fn resolve_data_directory(
+    xdg_data_home: Option<PathBuf>,
+    home: Option<PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(path) = xdg_data_home.filter(|path| path.is_absolute()) {
+        return Some(path.join("madhab-habit-tracker"));
     }
-    if let Some(home) = env::var_os("HOME") {
-        return PathBuf::from(home)
-            .join(".local")
+
+    home.filter(|path| path.is_absolute()).map(|path| {
+        path.join(".local")
             .join("share")
-            .join("madhab-habit-tracker");
-    }
-    PathBuf::from(".").join(".madhab-habit-tracker")
+            .join("madhab-habit-tracker")
+    })
+}
+
+fn data_directory() -> std::io::Result<PathBuf> {
+    let xdg_data_home = env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+    let home = env::var_os("HOME").map(PathBuf::from);
+
+    resolve_data_directory(xdg_data_home, home).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Cannot resolve an absolute XDG_DATA_HOME or HOME; refusing to write app data to the current directory.",
+        )
+    })
 }
 
 fn migrate(connection: &mut Connection) -> Result<()> {
@@ -123,4 +138,45 @@ pub fn set_today_completed(connection: &Connection, habit_id: i64, completed: bo
         )?;
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absolute_xdg_data_home_takes_precedence() {
+        let resolved = resolve_data_directory(
+            Some(PathBuf::from("/tmp/test-xdg")),
+            Some(PathBuf::from("/home/madhab")),
+        );
+        assert_eq!(
+            resolved,
+            Some(PathBuf::from("/tmp/test-xdg/madhab-habit-tracker"))
+        );
+    }
+
+    #[test]
+    fn relative_xdg_data_home_falls_back_to_absolute_home() {
+        let resolved = resolve_data_directory(
+            Some(PathBuf::from("relative/data")),
+            Some(PathBuf::from("/home/madhab")),
+        );
+        assert_eq!(
+            resolved,
+            Some(PathBuf::from(
+                "/home/madhab/.local/share/madhab-habit-tracker"
+            ))
+        );
+    }
+
+    #[test]
+    fn refuses_to_use_current_directory_when_home_is_unavailable() {
+        assert_eq!(
+            resolve_data_directory(Some(PathBuf::from("relative/data")), None),
+            None
+        );
+        assert_eq!(resolve_data_directory(None, None), None);
+    }
 }
