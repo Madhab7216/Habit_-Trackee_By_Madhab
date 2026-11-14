@@ -8,7 +8,7 @@ use std::{
     error::Error,
     fs::{self, DirBuilder, File, OpenOptions},
     io::{self, BufWriter, Write},
-    path::{Path, PathBuf},
+    path::Path,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -283,7 +283,6 @@ fn export_table(connection: &Connection, table: &str, destination: &Path) -> Por
     let mut statement = connection.prepare(&sql)?;
     let headers = statement
         .column_names()
-        .iter()
         .map(|name| name.to_string())
         .collect::<Vec<_>>();
 
@@ -368,7 +367,7 @@ fn write_manifest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::{path::PathBuf, sync::atomic::{AtomicU64, Ordering}};
 
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
