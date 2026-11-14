@@ -20,6 +20,8 @@ The current feature branch includes:
 - GTK 4 Today screen.
 - Add a daily binary habit.
 - Mark today's habit complete and undo it.
+- Rename active habits without changing history.
+- Archive and restore habits from a dedicated Archived view; archival preserves check-ins and pause history.
 - Pause and resume a habit; retain pause history in SQLite.
 - Prevent check-ins while a habit is paused.
 - Versioned SQLite schema migrations (v1 and v2).
@@ -31,7 +33,7 @@ The current UI still creates daily binary habits only. The pure schedule/scoring
 
 ## Roadmap
 
-1. **M3 — Habit management:** edit, archive/restore, numeric/count/duration/limit/frequency entry forms, flexible schedules and distinct daily states.
+1. **M3 — Habit management:** active-habit rename and reversible archive/restore are implemented in the foundation branch; numeric/count/duration/limit/frequency forms, flexible schedules and distinct daily states remain.
 2. **M4 — Scoring:** integrate adherence, habit strength and streaks with persisted, versioned history.
 3. **M5 — Productivity:** calendar, heatmap, summaries, goals, routines, reviews and reminders.
 4. **M6 — Trust and accessibility:** Bengali/English gettext, keyboard and screen-reader review, CSV export, consistent backup/restore and privacy hardening.
