@@ -6,8 +6,9 @@ Audit date: 2026-11-14
 
 - Repository: `Madhab7216/Habit_-Trackee_By_Madhab`
 - Default branch: `main`; it remains the original README-only baseline.
-- Active implementation branch: `work/linux-mint-habit-tracker-foundation`
-- Pull request: [#1 — GTK4 habit tracker foundation](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1) — open, draft, not merged. New M3 lifecycle commits continue on the same isolated feature branch; `main` remains unchanged.
+- Foundation branch: `work/linux-mint-habit-tracker-foundation` with [Draft PR #1](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1).
+- M3 schedule follow-up: `work/m3-schedule-aware-checkins` with [Draft PR #5](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/5), targeting the foundation branch.
+- Both PRs remain unmerged; `main` is unchanged.
 - [Issue #2](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/2): target Linux Mint workstation validation — open.
 - [Issue #3](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/3): remaining advanced workflows — open.
 
@@ -21,6 +22,7 @@ Keep PR #1 in draft. Do not merge until the latest Rust checks and the actual Li
 - Initial habit types and schedule fields in the schema: binary, numeric, duration, count, limit and frequency; daily, selected weekdays, every-N-days and times-per-week.
 - Pure Rust domain rules for civil dates, schedule evaluation, adherence, EMA habit-strength estimate and streak calculation.
 - Today screen: add a daily binary habit, rename it, mark complete, undo, pause, resume, archive and restore it from a dedicated Archived view.
+- M3 schedule follow-up: evaluate persisted daily, selected-weekday, every-N-days and times-per-week definitions with start/end bounds; show Due today / Not scheduled states and enforce due-date rules in the storage layer.
 - Reversible archive and restore operations preserve existing check-ins and pause history; database tests cover rename, archive/restore, and archived check-in protection.
 - Pause history is retained; only one open pause per habit is allowed; check-ins are blocked while paused.
 - Unit and schema tests, GitHub Actions workflow, and read-only Linux Mint environment audit script.
@@ -28,7 +30,7 @@ Keep PR #1 in draft. Do not merge until the latest Rust checks and the actual Li
 
 ## Important boundary: implemented is not the same as integrated
 
-The schedule/scoring engine is not yet wired into the Today screen, habit forms, persisted check-ins or analytics. The UI still creates daily binary habits only. Numeric/duration/count/limit/frequency tracking, partial/skipped entry forms and full schedule editing are not complete. Habit rename and reversible archive/restore are now implemented; permanent deletion remains intentionally deferred so history cannot be erased accidentally.
+Persisted schedule evaluation is now connected to the Today view and check-in storage guard in Draft PR #5. The UI still creates daily binary habits only: a GTK schedule editor, numeric/duration/count/limit/frequency forms, partial/skipped workflows and weekly quota progress remain open. The scoring engine is not yet integrated with persisted history or analytics. Habit rename and reversible archive/restore are implemented; permanent deletion remains deferred.
 
 The current pause/resume implementation is a first M3 slice, not a finished habit-management system.
 
@@ -42,16 +44,16 @@ Latest completed validation: [GitHub Actions run #32](https://github.com/Madhab7
 - Python SQLite schema tests: passed.
 - `bash -n scripts/audit-linux-mint.sh`: passed.
 
-This is hosted Ubuntu 24.04 CI evidence, not a substitute for the actual target Linux Mint workstation launch/persistence smoke test in Issue #2. The branch must be revalidated after any later code change.
+This is hosted Ubuntu 24.04 CI evidence, not a substitute for the actual target Linux Mint workstation launch/persistence smoke test in Issue #2. The schedule follow-up changes Rust source and must pass its own latest-head CI before review. The branch must be revalidated after any later code change.
 
 ## Remaining engineering work
 
 ### M3 — Complete habit management and measurement
 1. Active-habit rename and reversible archive/restore are implemented. Permanent deletion remains deferred; any future deletion must include an explicit export/confirmation policy.
 2. Binary, numeric/count, duration, limit/avoid and frequency-goal check-ins with unit and direction validation.
-3. Connect stored schedule definitions to `domain.rs`; derive due/unscheduled states correctly.
+3. Persisted schedule evaluation and due/unscheduled check-in guards are implemented in Draft PR #5; GTK schedule editing, explicit timezone selection and weekly quota progress remain open.
 4. Distinguish completed, partial, skipped, missed, paused and not-scheduled periods.
-5. Add migration and integration tests for every workflow.
+5. Add migration and integration tests for every workflow; the new schedule integration tests await the latest-head Rust CI result.
 
 ### M4 — Scoring integration
 1. Feed persisted eligible periods to the scoring engine.
