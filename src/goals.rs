@@ -37,7 +37,7 @@ pub struct Milestone {
     pub status: String,
 }
 
-fn validate_title(title: &str, label: &str) -> Result<&str> {
+fn validate_title<'a>(title: &'a str, label: &str) -> Result<&'a str> {
     let normalized = title.trim();
     if normalized.is_empty() || normalized.chars().count() > 120 {
         return Err(rusqlite::Error::InvalidParameterName(format!(
