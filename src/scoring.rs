@@ -66,7 +66,6 @@ impl PauseRange {
 
 #[derive(Debug, Clone, Copy)]
 struct ScheduledDay {
-    date: CivilDate,
     paused: bool,
     entry: Option<Entry>,
 }
@@ -343,7 +342,6 @@ fn build_period_buckets(
             .ok_or_else(|| scoring_data_error("date range"))?;
         if let Some(period) = schedule.period_for(date) {
             let day = ScheduledDay {
-                date,
                 paused: pauses.iter().any(|pause| pause.contains(date)),
                 entry: entries.get(&ordinal).copied(),
             };
