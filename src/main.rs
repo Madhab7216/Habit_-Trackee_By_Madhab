@@ -1,5 +1,6 @@
 mod db;
 pub mod domain;
+pub mod goals;
 
 use gtk::prelude::*;
 use gtk::{
@@ -14,7 +15,7 @@ use std::{
 const APP_ID: &str = "org.madhab.habittracker";
 
 struct AppState {
-    connection: RefCell<rusqlite::Connection>,
+    connection: Rc<RefCell<rusqlite::Connection>>,
 }
 
 fn main() {
@@ -43,7 +44,7 @@ fn build_ui(application: &Application) {
     };
 
     let state = Rc::new(AppState {
-        connection: RefCell::new(connection),
+        connection: Rc::new(RefCell::new(connection)),
     });
     let window = ApplicationWindow::builder()
         .application(application)
@@ -78,9 +79,11 @@ fn build_ui(application: &Application) {
     let add_button = Button::with_label("Add habit");
     add_button.add_css_class("suggested-action");
     let archive_view_button = Button::with_label("View archived");
+    let goals_button = Button::with_label("Goals & milestones");
     form.append(&habit_entry);
     form.append(&add_button);
     form.append(&archive_view_button);
+    form.append(&goals_button);
 
     let list = ListBox::new();
     list.set_selection_mode(gtk::SelectionMode::None);
@@ -139,6 +142,12 @@ fn build_ui(application: &Application) {
             "View archived"
         });
         refresh_list(&toggle_list, &toggle_state, &toggle_parent, show_archived);
+    });
+
+    let goals_state = Rc::clone(&state);
+    let goals_parent = window.clone();
+    goals_button.connect_clicked(move |_| {
+        goals::open_window(&goals_parent, Rc::clone(&goals_state.connection));
     });
 
     refresh_list(&list, &state, &window, false);
