@@ -439,31 +439,32 @@ fn evaluate_weekly_period(
     }
 
     let mut actual_sessions = 0.0;
-    let mut has_any_entry = false;
+    let mut has_progress_entry = false;
     for day in bucket.days.iter().filter(|day| !day.paused) {
         match day.entry {
-            Some(entry) if entry.status == EntryStatus::Skipped => {
-                has_any_entry = true;
-            }
             Some(Entry {
                 status: EntryStatus::Completed,
                 value,
             }) => {
                 actual_sessions += value.unwrap_or(1.0);
-                has_any_entry = true;
+                has_progress_entry = true;
             }
             Some(Entry {
                 status: EntryStatus::Partial,
                 value: Some(value),
             }) => {
                 actual_sessions += value;
-                has_any_entry = true;
+                has_progress_entry = true;
             }
             Some(Entry {
                 status: EntryStatus::Partial,
                 value: None,
             }) => return Err(scoring_data_error("weekly partial entry value")),
-            None => {}
+            Some(Entry {
+                status: EntryStatus::Skipped,
+                ..
+            })
+            | None => {}
         }
     }
 
@@ -473,7 +474,7 @@ fn evaluate_weekly_period(
 
     Ok(PeriodEvaluation {
         result: PeriodResult::Achievement(ratio),
-        missed: !has_any_entry,
+        missed: !has_progress_entry,
     })
 }
 
@@ -635,6 +636,34 @@ mod tests {
 
         // Six active days out of seven means a target of 3 * 6/7.
         assert!((result.adherence.unwrap() - (2.0 / (3.0 * 6.0 / 7.0))).abs() < 1e-12);
+    }
+
+    #[test]
+    fn mixed_weekly_skip_and_no_sessions_is_still_missed() {
+        let connection = test_connection();
+        let id = add_habit(
+            &connection,
+            "Training",
+            "frequency",
+            "at_least",
+            None,
+            "times_per_week",
+            "2026-11-02",
+            Some(3),
+        );
+        add_entry(&connection, id, "2026-11-02", "skipped", None);
+
+        let result = summarize_habit(
+            &connection,
+            load_active_habits(&connection).unwrap().remove(0),
+            date(2026, 11, 10),
+        )
+        .unwrap();
+
+        assert_eq!(result.closed_periods, 1);
+        assert_eq!(result.missed_periods, 1);
+        assert_eq!(result.skipped_periods, 0);
+        assert_eq!(result.adherence, Some(0.0));
     }
 
     #[test]
