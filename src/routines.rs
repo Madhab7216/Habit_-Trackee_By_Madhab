@@ -7,7 +7,7 @@
 use crate::domain::CivilDate;
 use gtk::prelude::*;
 use rusqlite::{Connection, OptionalExtension, Result, params};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::{Cell, RefCell}, rc::Rc};
 
 const ROUTINE_MIGRATION: &str = include_str!("../migrations/0004_routines.sql");
 type Refresh = Rc<dyn Fn()>;
@@ -711,6 +711,11 @@ pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection
     let create = gtk::Button::with_label("Create routine");
     create.add_css_class("suggested-action");
     create.set_halign(gtk::Align::Start);
+    let archived_mode = Rc::new(Cell::new(false));
+    let archived_toggle = gtk::Button::with_label("Include archived routines");
+    let view_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    view_actions.append(&create);
+    view_actions.append(&archived_toggle);
     let message = gtk::Label::new(Some(
         "Routine steps are separate from habit check-ins. Linking a habit does not change its score.",
     ));
@@ -724,7 +729,7 @@ pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection
 
     page.append(&heading);
     page.append(&subtitle);
-    page.append(&create);
+    page.append(&view_actions);
     page.append(&message);
     page.append(&scroller);
     window.set_child(Some(&page));
@@ -732,14 +737,45 @@ pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection
     let refresh_parent = window.clone();
     let refresh_list = list.clone();
     let refresh_connection = Rc::clone(&connection);
+    let refresh_mode = Rc::clone(&archived_mode);
     let refresh: Refresh = Rc::new(move || {
-        refresh_routine_list(&refresh_parent, &refresh_list, &refresh_connection);
+        refresh_routine_list(
+            &refresh_parent,
+            &refresh_list,
+            &refresh_connection,
+            refresh_mode.get(),
+        );
+    });
+
+    let view_mode = Rc::clone(&archived_mode);
+    let view_button = archived_toggle.clone();
+    let view_parent = window.clone();
+    let view_list = list.clone();
+    let view_connection = Rc::clone(&connection);
+    archived_toggle.connect_clicked(move |_| {
+        let show_archived = !view_mode.get();
+        view_mode.set(show_archived);
+        view_button.set_label(if show_archived {
+            "Show active routines only"
+        } else {
+            "Include archived routines"
+        });
+        refresh_routine_list(
+            &view_parent,
+            &view_list,
+            &view_connection,
+            show_archived,
+        );
     });
 
     let editor_parent = window.clone();
     let editor_connection = Rc::clone(&connection);
+    let editor_mode = Rc::clone(&archived_mode);
+    let editor_button = archived_toggle.clone();
     let editor_refresh = Rc::clone(&refresh);
     create.connect_clicked(move |_| {
+        editor_mode.set(false);
+        editor_button.set_label("Include archived routines");
         show_editor(
             &editor_parent,
             Rc::clone(&editor_connection),
@@ -756,11 +792,12 @@ fn refresh_routine_list(
     parent: &gtk::Window,
     list: &gtk::Box,
     connection: &Rc<RefCell<Connection>>,
+    include_archived: bool,
 ) {
     while let Some(child) = list.first_child() {
         list.remove(&child);
     }
-    let routines = match list_routines(&connection.borrow(), false) {
+    let routines = match list_routines(&connection.borrow(), include_archived) {
         Ok(items) => items,
         Err(error) => {
             append_message(list, &format!("Could not load routines: {error}"));
@@ -808,16 +845,21 @@ fn refresh_routine_list(
         detail.set_wrap(true);
 
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        let archived = routine.status == "archived";
         let edit = gtk::Button::with_label("Edit");
+        edit.set_sensitive(!archived);
         let run = gtk::Button::with_label("Run today");
+        run.set_sensitive(routine.status == "active");
         let history = gtk::Button::with_label("History");
-        let toggle = gtk::Button::with_label(if routine.status == "paused" {
+        let toggle = gtk::Button::with_label(if archived {
+            "Restore"
+        } else if routine.status == "paused" {
             "Resume"
         } else {
             "Pause"
         });
         let archive = gtk::Button::with_label("Archive");
-        run.set_sensitive(routine.status == "active");
+        archive.set_sensitive(!archived);
         for button in [&edit, &run, &history, &toggle, &archive] {
             actions.append(button);
         }
@@ -838,7 +880,7 @@ fn refresh_routine_list(
             let list = list.clone();
             let parent = parent.clone();
             let connection = Rc::clone(connection);
-            Rc::new(move || refresh_routine_list(&parent, &list, &connection)) as Refresh
+            Rc::new(move || refresh_routine_list(&parent, &list, &connection, false)) as Refresh
         };
         let edit_id = routine.id;
         edit.connect_clicked(move |_| {
@@ -883,7 +925,7 @@ fn refresh_routine_list(
         let toggle_list = list.clone();
         let toggle_parent = parent.clone();
         toggle.connect_clicked(move |_| {
-            let next = if toggle_status == "paused" {
+            let next = if toggle_status == "archived" || toggle_status == "paused" {
                 "active"
             } else {
                 "paused"
@@ -891,7 +933,7 @@ fn refresh_routine_list(
             if let Err(error) = set_routine_status(&toggle_connection.borrow(), toggle_id, next) {
                 eprintln!("Could not update routine status: {error}");
             }
-            refresh_routine_list(&toggle_parent, &toggle_list, &toggle_connection);
+            refresh_routine_list(&toggle_parent, &toggle_list, &toggle_connection, true);
         });
 
         let archive_connection = Rc::clone(connection);
@@ -904,7 +946,7 @@ fn refresh_routine_list(
             {
                 eprintln!("Could not archive routine: {error}");
             }
-            refresh_routine_list(&archive_parent, &archive_list, &archive_connection);
+            refresh_routine_list(&archive_parent, &archive_list, &archive_connection, false);
         });
     }
 }
