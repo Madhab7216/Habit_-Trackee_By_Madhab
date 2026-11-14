@@ -247,7 +247,6 @@ pub fn achievement_ratio(
     let ratio = match direction {
         Direction::AtLeast => actual / target,
         Direction::AtMost if actual <= target => 1.0,
-        Direction::AtMost if actual == 0.0 => 1.0,
         Direction::AtMost => target / actual,
     };
     Ok(ratio.clamp(0.0, 1.0))
