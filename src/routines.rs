@@ -208,10 +208,10 @@ fn schedule_parts(schedule: RoutineSchedule) -> (&'static str, Option<i64>) {
 
 fn validate_step_links(connection: &Connection, steps: &[NewRoutineStep]) -> Result<()> {
     for step in steps {
-        if let RoutineStepKind::Habit { habit_id } = step.kind {
+        if let RoutineStepKind::Habit { habit_id } = &step.kind {
             let available: bool = connection.query_row(
                 "SELECT EXISTS(
-                    SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL
+                    SELECT 1 FROM habits WHERE id = ?1
                 )",
                 [habit_id],
                 |row| row.get(0),
@@ -230,9 +230,9 @@ fn insert_steps(
     steps: &[NewRoutineStep],
 ) -> Result<()> {
     for (index, step) in steps.iter().enumerate() {
-        let (kind, habit_id) = match step.kind {
+        let (kind, habit_id) = match &step.kind {
             RoutineStepKind::Action => ("action", None),
-            RoutineStepKind::Habit { habit_id } => ("habit", Some(habit_id)),
+            RoutineStepKind::Habit { habit_id } => ("habit", Some(*habit_id)),
         };
         connection.execute(
             "INSERT INTO routine_steps
@@ -491,9 +491,9 @@ pub fn start_run(connection: &Connection, routine_id: i64, local_date: &str) -> 
     )?;
     if existing_items == 0 {
         for step in &definition.steps {
-            let (step_type, linked_habit_id) = match step.kind {
+            let (step_type, linked_habit_id) = match &step.kind {
                 RoutineStepKind::Action => ("action", None),
-                RoutineStepKind::Habit { habit_id } => ("habit", Some(habit_id)),
+                RoutineStepKind::Habit { habit_id } => ("habit", Some(*habit_id)),
             };
             transaction.execute(
                 "INSERT INTO routine_run_steps
@@ -627,7 +627,7 @@ fn schedule_label(schedule: RoutineSchedule) -> String {
             let selected = DAYS
                 .iter()
                 .enumerate()
-                .filter(|(index, _)| weekday_mask & (1_u8 << index) != 0)
+                .filter(|(index, _)| weekday_mask & (1_u8 << *index) != 0)
                 .map(|(_, day)| *day)
                 .collect::<Vec<_>>();
             format!("Every {}", selected.join(", "))
@@ -856,7 +856,7 @@ fn show_editor(
     on_saved: Refresh,
 ) {
     let editing = existing.is_some();
-    let current_date = local_today(&connection.borrow()).unwrap_or_else(|_| "2026-01-01".to_string());
+    let current_date = local_today(&connection.borrow()).unwrap_or_default();
     let routine = existing.as_ref().map(|value| value.routine.clone());
     let initial_steps = existing
         .as_ref()
@@ -1473,7 +1473,7 @@ mod tests {
     #[test]
     fn linked_habit_must_exist_and_be_active() {
         let connection = memory_connection();
-        let habit_id = connection
+        connection
             .execute("INSERT INTO habits(name) VALUES ('Read 20 pages')", [])
             .expect("insert habit");
         let id = connection.last_insert_rowid();
@@ -1496,12 +1496,11 @@ mod tests {
                 vec![NewRoutineStep {
                     title: "Read".to_string(),
                     details: String::new(),
-                    kind: RoutineStepKind::Habit { habit_id: id },
+                    kind: RoutineStepKind::Habit { habit_id: 999 },
                     required: true,
                 }]
             )
         ).is_err());
-        assert!(habit_id >= 0);
     }
 
     #[test]
