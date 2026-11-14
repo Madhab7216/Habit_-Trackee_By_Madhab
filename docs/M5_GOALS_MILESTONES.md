@@ -12,7 +12,9 @@ A local-first Goals workspace integrated into the GTK4 desktop app. It reuses th
 - Add dated or undated milestones.
 - Mark a milestone complete, reopen it, or skip it.
 - View milestone progress and linked habit count.
-- Link/unlink habits through the repository API; the GTK window does not yet expose habit linking.
+- Open **Link habits** from a goal card and select or clear any non-archived habit with accessible GTK checkboxes.
+- Save the complete selection in one SQLite transaction; Cancel discards edits. Missing/archived IDs or an archived goal reject the save without changing existing links.
+- Linked-habit count refreshes on the goal card. Linking is organizational only and does not silently add milestone progress.
 
 ## Progress policy
 
@@ -34,6 +36,6 @@ Skipped milestones are excluded from the denominator but remain visible. A goal 
 
 ## Tests and deferred work
 
-Rust tests cover validation, progress, skipped milestones, reopen, archive/restore, links and idempotent migration. Python tests check SQLite constraints and migration preservation.
+Rust tests cover validation, progress, skipped milestones, reopen, archive/restore, link selection, atomic replacement/rollback and idempotent migration. Python tests check SQLite constraints and migration preservation.
 
 Goal analytics/history charts, task/routine builder, reminders, automatic scoring contributions, Bengali/English localization and permanent deletion remain deferred. Automatic habit-to-goal contributions need a separate explicit and versioned policy.
