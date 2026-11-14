@@ -1,8 +1,10 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod portability;
+pub mod data_ui;
 
-use crate::domain::Cadence;
+use crate::{data_ui, domain::Cadence};
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Button, Entry, HeaderBar, Label, ListBox, ListBoxRow,
@@ -63,6 +65,17 @@ fn build_ui(application: &Application) {
         goals::open_window(&goals_parent, Rc::clone(&goals_connection));
     });
     header.pack_end(&goals_button);
+
+    let data_button = Button::with_label("Data & backups");
+    data_button.set_tooltip_text(Some(
+        "Create, verify, restore and export local app data",
+    ));
+    let data_parent = window.clone();
+    let data_connection = Rc::clone(&state.connection);
+    data_button.connect_clicked(move |_| {
+        data_ui::open_window(&data_parent, Rc::clone(&data_connection));
+    });
+    header.pack_end(&data_button);
     window.set_titlebar(Some(&header));
 
     let page = gtk::Box::new(Orientation::Vertical, 14);
