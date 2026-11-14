@@ -100,6 +100,7 @@ If neither path is an absolute usable location, the app refuses to place persona
 - [Goals and milestones](docs/M5_GOALS_MILESTONES.md)
 - [Scoring policy](docs/SCORING_POLICY.md)
 - [M4 persisted scoring](docs/M4_PERSISTED_SCORING.md)
+- [M4 persisted scoring PR #12](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/12)
 - [Data portability](docs/DATA_PORTABILITY.md)
 
 ## Release blockers
