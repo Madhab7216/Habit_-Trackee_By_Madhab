@@ -1,0 +1,15 @@
+[package]
+name = "habit-trackers-by-madhab"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "UNLICENSED"
+description = "Offline-first Linux desktop habit and goal tracker"
+
+[[bin]]
+name = "madhab-habit-tracker"
+path = "src/main.rs"
+
+[dependencies]
+gtk = { package = "gtk4", version = "=0.11.5" }
+rusqlite = { version = "=0.42.0", features = ["bundled"] }
