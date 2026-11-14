@@ -1,6 +1,6 @@
 mod db;
-mod goals;
 pub mod domain;
+mod goals;
 
 use gtk::prelude::*;
 use gtk::{
@@ -138,7 +138,9 @@ fn build_ui(application: &Application) {
         }
         let cadence = match add_schedule.selected() {
             0 => Cadence::Daily,
-            1 => Cadence::Weekdays { weekday_mask: 0b001_1111 },
+            1 => Cadence::Weekdays {
+                weekday_mask: 0b001_1111,
+            },
             2 => Cadence::EveryNDays { interval: 2 },
             3 => Cadence::TimesPerWeek {
                 target: add_weekly_target.value().round().clamp(1.0, 7.0) as u8,

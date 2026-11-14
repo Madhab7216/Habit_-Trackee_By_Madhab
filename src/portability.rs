@@ -461,10 +461,7 @@ mod tests {
             .execute_batch(include_str!("../migrations/0003_goal_milestones.sql"))
             .expect("apply goal milestone migration");
         connection
-            .execute(
-                "INSERT INTO goal_schema_migrations(version) VALUES (1)",
-                [],
-            )
+            .execute("INSERT INTO goal_schema_migrations(version) VALUES (1)", [])
             .expect("record goal milestone migration");
         connection
             .execute(

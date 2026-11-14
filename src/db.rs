@@ -122,15 +122,27 @@ pub fn create_habit_with_cadence(
     let (schedule_type, weekday_mask, interval_days, target_per_period, tracking_type) =
         match cadence {
             Cadence::Daily => ("daily", None, None, None, "binary"),
-            Cadence::Weekdays { weekday_mask } => {
-                ("weekdays", Some(i64::from(weekday_mask)), None, None, "binary")
-            }
-            Cadence::EveryNDays { interval } => {
-                ("every_n_days", None, Some(i64::from(interval)), None, "binary")
-            }
-            Cadence::TimesPerWeek { target } => {
-                ("times_per_week", None, None, Some(i64::from(target)), "frequency")
-            }
+            Cadence::Weekdays { weekday_mask } => (
+                "weekdays",
+                Some(i64::from(weekday_mask)),
+                None,
+                None,
+                "binary",
+            ),
+            Cadence::EveryNDays { interval } => (
+                "every_n_days",
+                None,
+                Some(i64::from(interval)),
+                None,
+                "binary",
+            ),
+            Cadence::TimesPerWeek { target } => (
+                "times_per_week",
+                None,
+                None,
+                Some(i64::from(target)),
+                "frequency",
+            ),
         };
 
     connection.execute(
@@ -459,7 +471,9 @@ mod tests {
         create_habit_with_cadence(
             &connection,
             "Read",
-            Cadence::Weekdays { weekday_mask: 0b001_1111 },
+            Cadence::Weekdays {
+                weekday_mask: 0b001_1111,
+            },
         )
         .expect("create weekday habit");
 
@@ -476,12 +490,8 @@ mod tests {
     #[test]
     fn create_habit_persists_weekly_frequency_target() {
         let connection = memory_connection();
-        create_habit_with_cadence(
-            &connection,
-            "Workout",
-            Cadence::TimesPerWeek { target: 3 },
-        )
-        .expect("create weekly frequency habit");
+        create_habit_with_cadence(&connection, "Workout", Cadence::TimesPerWeek { target: 3 })
+            .expect("create weekly frequency habit");
 
         let stored: (String, String, i64) = connection
             .query_row(
@@ -491,24 +501,31 @@ mod tests {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .expect("read frequency schedule");
-        assert_eq!(stored, ("frequency".to_string(), "times_per_week".to_string(), 3));
+        assert_eq!(
+            stored,
+            ("frequency".to_string(), "times_per_week".to_string(), 3)
+        );
     }
 
     #[test]
     fn create_habit_rejects_invalid_recurrence() {
         let connection = memory_connection();
-        assert!(create_habit_with_cadence(
-            &connection,
-            "Invalid weekdays",
-            Cadence::Weekdays { weekday_mask: 0 }
-        )
-        .is_err());
-        assert!(create_habit_with_cadence(
-            &connection,
-            "Invalid weekly target",
-            Cadence::TimesPerWeek { target: 8 }
-        )
-        .is_err());
+        assert!(
+            create_habit_with_cadence(
+                &connection,
+                "Invalid weekdays",
+                Cadence::Weekdays { weekday_mask: 0 }
+            )
+            .is_err()
+        );
+        assert!(
+            create_habit_with_cadence(
+                &connection,
+                "Invalid weekly target",
+                Cadence::TimesPerWeek { target: 8 }
+            )
+            .is_err()
+        );
     }
 
     #[test]
