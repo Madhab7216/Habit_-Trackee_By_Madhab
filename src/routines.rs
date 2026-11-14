@@ -163,10 +163,10 @@ fn validate_draft(draft: &RoutineDraft) -> Result<()> {
             return Err(invalid_input("end date cannot be before start date"));
         }
     }
-    if let RoutineSchedule::Weekdays { weekday_mask } = draft.schedule {
-        if weekday_mask == 0 || weekday_mask & !0b0111_1111 != 0 {
-            return Err(invalid_input("select at least one valid weekday"));
-        }
+    if let RoutineSchedule::Weekdays { weekday_mask } = draft.schedule
+        && (weekday_mask == 0 || weekday_mask & !0b0111_1111 != 0)
+    {
+        return Err(invalid_input("select at least one valid weekday"));
     }
     if draft.steps.is_empty() || draft.steps.len() > 40 {
         return Err(invalid_input(
@@ -973,7 +973,7 @@ fn show_editor(
                 })
                 .collect()
         })
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
     let drafts = Rc::new(RefCell::new(initial_steps));
 
     let editor = gtk::Window::builder()
@@ -1051,10 +1051,8 @@ fn show_editor(
     let end_date = gtk::Entry::new();
     end_date.set_placeholder_text(Some("Optional end date"));
     end_date.set_hexpand(true);
-    if let Some(value) = routine.as_ref() {
-        if let Some(end) = value.end_date.as_deref() {
-            end_date.set_text(end);
-        }
+    if let Some(end) = routine.as_ref().and_then(|value| value.end_date.as_deref()) {
+        end_date.set_text(end);
     }
     date_row.append(&start_date);
     date_row.append(&end_date);
@@ -1299,7 +1297,7 @@ fn show_run_window(parent: &gtk::Window, connection: Rc<RefCell<Connection>>, ro
         .unwrap_or_else(|_| "Routine".to_string());
 
     let window = gtk::Window::builder()
-        .title(&format!("{title} · {date}"))
+        .title(format!("{title} · {date}"))
         .transient_for(parent)
         .default_width(640)
         .default_height(560)
@@ -1441,7 +1439,7 @@ fn show_history_window(
     title: &str,
 ) {
     let window = gtk::Window::builder()
-        .title(&format!("{title} · History"))
+        .title(format!("{title} · History"))
         .transient_for(parent)
         .default_width(520)
         .default_height(420)
