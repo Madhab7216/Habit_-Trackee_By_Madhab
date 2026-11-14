@@ -195,6 +195,7 @@ pub fn load_report(
             })
         })?;
         let collected = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        drop(statement);
         collected
     };
 
