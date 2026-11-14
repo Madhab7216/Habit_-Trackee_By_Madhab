@@ -1,3 +1,4 @@
+use crate::domain::{Cadence, CivilDate, HabitSchedule};
 use rusqlite::{Connection, Result, params};
 use std::{env, fs, path::PathBuf};
 
@@ -11,6 +12,8 @@ pub struct TodayHabit {
     pub name: String,
     pub completed: bool,
     pub paused: bool,
+    /// False means the habit is intentionally not due on the requested local date.
+    pub scheduled: bool,
 }
 
 pub fn open() -> Result<Connection> {
@@ -161,40 +164,122 @@ pub fn archived_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
             name: row.get(1)?,
             completed: row.get::<_, i64>(2)? != 0,
             paused: row.get::<_, i64>(3)? != 0,
+            scheduled: false,
         })
     })?;
     rows.collect()
 }
 
+/// Read the machine-local date once and use it consistently for every row in Today.
 pub fn today_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
+    habits_for_date(connection, local_today(connection)?)
+}
+
+/// Deterministic schedule evaluation for a supplied civil date. This is reusable by
+/// calendar/history views and avoids coupling schedule tests to the wall clock.
+pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<TodayHabit>> {
     let mut statement = connection.prepare(
-        "SELECT h.id, h.name,
+        "SELECT h.id, h.name, h.schedule_type, h.weekday_mask, h.interval_days,
+                h.target_per_period, h.start_date, h.end_date,
                 EXISTS (
                     SELECT 1 FROM habit_entries e
                     WHERE e.habit_id = h.id
-                      AND e.local_date = date('now', 'localtime')
+                      AND e.local_date = ?1
                       AND e.status = 'completed'
                 ) AS completed,
                 EXISTS (
                     SELECT 1 FROM habit_pause_periods p
                     WHERE p.habit_id = h.id
-                      AND p.starts_on <= date('now', 'localtime')
-                      AND (p.ends_on IS NULL OR date('now', 'localtime') < p.ends_on)
+                      AND p.starts_on <= ?1
+                      AND (p.ends_on IS NULL OR ?1 < p.ends_on)
                 ) AS paused
          FROM habits h
          WHERE h.archived_at IS NULL
          ORDER BY h.sort_order, h.id",
     )?;
 
-    let rows = statement.query_map([], |row| {
+    let rows = statement.query_map([date.to_string()], |row| {
+        let cadence = cadence_from_row(row)?;
+        let start_date = civil_date_from_row(row, 6, "start_date")?;
+        let end_date = row
+            .get::<_, Option<String>>(7)?
+            .map(|value| {
+                parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("end_date"))
+            })
+            .transpose()?;
+        let schedule = HabitSchedule::new(cadence, start_date, end_date)
+            .map_err(|_| invalid_schedule_field("schedule bounds"))?;
+
         Ok(TodayHabit {
             id: row.get(0)?,
             name: row.get(1)?,
-            completed: row.get::<_, i64>(2)? != 0,
-            paused: row.get::<_, i64>(3)? != 0,
+            completed: row.get::<_, i64>(8)? != 0,
+            paused: row.get::<_, i64>(9)? != 0,
+            scheduled: schedule.period_for(date).is_some(),
         })
     })?;
     rows.collect()
+}
+
+fn local_today(connection: &Connection) -> Result<CivilDate> {
+    let value: String =
+        connection.query_row("SELECT date('now', 'localtime')", [], |row| row.get(0))?;
+    parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("current local date"))
+}
+
+fn cadence_from_row(row: &rusqlite::Row<'_>) -> Result<Cadence> {
+    let schedule_type: String = row.get(2)?;
+    match schedule_type.as_str() {
+        "daily" => Ok(Cadence::Daily),
+        "weekdays" => {
+            let raw: Option<i64> = row.get(3)?;
+            let weekday_mask = raw
+                .and_then(|value| u8::try_from(value).ok())
+                .ok_or_else(|| invalid_schedule_field("weekday_mask"))?;
+            Ok(Cadence::Weekdays { weekday_mask })
+        }
+        "every_n_days" => {
+            let raw: Option<i64> = row.get(4)?;
+            let interval = raw
+                .and_then(|value| u16::try_from(value).ok())
+                .ok_or_else(|| invalid_schedule_field("interval_days"))?;
+            Ok(Cadence::EveryNDays { interval })
+        }
+        "times_per_week" => {
+            let raw: Option<i64> = row.get(5)?;
+            let target = raw
+                .and_then(|value| u8::try_from(value).ok())
+                .ok_or_else(|| invalid_schedule_field("target_per_period"))?;
+            Ok(Cadence::TimesPerWeek { target })
+        }
+        _ => Err(invalid_schedule_field("schedule_type")),
+    }
+}
+
+fn civil_date_from_row(
+    row: &rusqlite::Row<'_>,
+    index: usize,
+    field: &str,
+) -> Result<CivilDate> {
+    let value: String = row.get(index)?;
+    parse_civil_date(&value).ok_or_else(|| invalid_schedule_field(field))
+}
+
+fn parse_civil_date(value: &str) -> Option<CivilDate> {
+    let mut parts = value.split('-');
+    let year = parts.next()?.parse::<i32>().ok()?;
+    let month = parts.next()?.parse::<u8>().ok()?;
+    let day = parts.next()?.parse::<u8>().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    CivilDate::new(year, month, day)
+}
+
+fn invalid_schedule_field(field: &str) -> rusqlite::Error {
+    rusqlite::Error::InvalidParameterName(format!(
+        "invalid persisted habit schedule field: {field}"
+    ))
 }
 
 /// Pause is effective from the current local date. A resume date is exclusive:
@@ -231,6 +316,17 @@ pub fn set_paused(connection: &Connection, habit_id: i64, paused: bool) -> Resul
 }
 
 pub fn set_today_completed(connection: &Connection, habit_id: i64, completed: bool) -> Result<()> {
+    set_completed_for_date(connection, habit_id, completed, local_today(connection)?)
+}
+
+/// Persist a check-in only when the active habit is due and not paused for that date.
+/// Undo remains allowed for an active habit even if its schedule was later edited.
+fn set_completed_for_date(
+    connection: &Connection,
+    habit_id: i64,
+    completed: bool,
+    date: CivilDate,
+) -> Result<()> {
     let active: bool = connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL)",
         [habit_id],
@@ -240,36 +336,36 @@ pub fn set_today_completed(connection: &Connection, habit_id: i64, completed: bo
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
+    let date_text = date.to_string();
     if completed {
-        let paused: bool = connection.query_row(
-            "SELECT EXISTS (
-                SELECT 1 FROM habit_pause_periods
-                WHERE habit_id = ?1
-                  AND starts_on <= date('now', 'localtime')
-                  AND (ends_on IS NULL OR date('now', 'localtime') < ends_on)
-             )",
-            [habit_id],
-            |row| row.get(0),
-        )?;
-        if paused {
+        let habit = habits_for_date(connection, date)?
+            .into_iter()
+            .find(|habit| habit.id == habit_id)
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+
+        if habit.paused {
             return Err(rusqlite::Error::InvalidParameterName(
                 "a paused habit cannot be checked in".to_string(),
             ));
         }
+        if !habit.scheduled {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "a habit cannot be checked in on an unscheduled date".to_string(),
+            ));
+        }
+
         connection.execute(
             "INSERT INTO habit_entries(habit_id, local_date, status, value)
-             VALUES (?1, date('now', 'localtime'), 'completed', 1.0)
+             VALUES (?1, ?2, 'completed', 1.0)
              ON CONFLICT(habit_id, local_date) DO UPDATE SET
                 status = 'completed', value = 1.0, updated_at = CURRENT_TIMESTAMP",
-            [habit_id],
+            params![habit_id, date_text],
         )?;
     } else {
         connection.execute(
             "DELETE FROM habit_entries
-             WHERE habit_id = ?1
-               AND local_date = date('now', 'localtime')
-               AND status = 'completed'",
-            [habit_id],
+             WHERE habit_id = ?1 AND local_date = ?2 AND status = 'completed'",
+            params![habit_id, date_text],
         )?;
     }
     Ok(())
@@ -460,4 +556,89 @@ mod tests {
         assert!(archive_habit(&connection, 999).is_err());
         assert!(restore_habit(&connection, 999).is_err());
     }
+    fn date(year: i32, month: u8, day: u8) -> CivilDate {
+        CivilDate::new(year, month, day).expect("valid test date")
+    }
+
+    fn new_habit(connection: &Connection, name: &str) -> i64 {
+        create_habit(connection, name).expect("create habit");
+        connection
+            .query_row("SELECT id FROM habits WHERE name = ?1", [name], |row| row.get(0))
+            .expect("read habit id")
+    }
+
+    #[test]
+    fn persisted_weekday_schedule_only_marks_selected_days() {
+        let connection = memory_connection();
+        let habit_id = new_habit(&connection, "Walk");
+        connection.execute(
+            "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
+                start_date = '2026-11-01' WHERE id = ?1",
+            [habit_id],
+        ).expect("set Monday-only schedule");
+
+        assert!(habits_for_date(&connection, date(2026, 11, 16)).unwrap()[0].scheduled);
+        assert!(!habits_for_date(&connection, date(2026, 11, 15)).unwrap()[0].scheduled);
+    }
+
+    #[test]
+    fn every_n_days_uses_start_anchor_and_date_bounds() {
+        let connection = memory_connection();
+        let habit_id = new_habit(&connection, "Stretch");
+        connection.execute(
+            "UPDATE habits SET schedule_type = 'every_n_days', interval_days = 2,
+                start_date = '2026-11-01', end_date = '2026-11-10' WHERE id = ?1",
+            [habit_id],
+        ).expect("set every-two-days schedule");
+
+        assert!(habits_for_date(&connection, date(2026, 11, 3)).unwrap()[0].scheduled);
+        assert!(!habits_for_date(&connection, date(2026, 11, 4)).unwrap()[0].scheduled);
+        assert!(!habits_for_date(&connection, date(2026, 10, 31)).unwrap()[0].scheduled);
+        assert!(!habits_for_date(&connection, date(2026, 11, 11)).unwrap()[0].scheduled);
+    }
+
+    #[test]
+    fn weekly_frequency_uses_a_monday_anchored_evaluation_period() {
+        let connection = memory_connection();
+        let habit_id = new_habit(&connection, "Practice piano");
+        connection.execute(
+            "UPDATE habits SET schedule_type = 'times_per_week', target_per_period = 3,
+                period_unit = 'week', start_date = '2026-11-01' WHERE id = ?1",
+            [habit_id],
+        ).expect("set times-per-week schedule");
+
+        assert!(habits_for_date(&connection, date(2026, 11, 9)).unwrap()[0].scheduled);
+        assert!(habits_for_date(&connection, date(2026, 11, 14)).unwrap()[0].scheduled);
+    }
+
+    #[test]
+    fn unscheduled_checkins_are_rejected_and_due_checkins_are_saved() {
+        let connection = memory_connection();
+        let habit_id = new_habit(&connection, "Read");
+        connection.execute(
+            "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
+                start_date = '2026-11-01' WHERE id = ?1",
+            [habit_id],
+        ).expect("set Monday-only schedule");
+
+        assert!(set_completed_for_date(&connection, habit_id, true, date(2026, 11, 15)).is_err());
+        set_completed_for_date(&connection, habit_id, true, date(2026, 11, 16))
+            .expect("save Monday check-in");
+
+        let count: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM habit_entries WHERE habit_id = ?1",
+            [habit_id],
+            |row| row.get(0),
+        ).expect("count entries");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn archived_habits_are_excluded_from_date_queries() {
+        let connection = memory_connection();
+        let habit_id = new_habit(&connection, "Archive test");
+        archive_habit(&connection, habit_id).expect("archive habit");
+        assert!(habits_for_date(&connection, date(2026, 11, 16)).unwrap().is_empty());
+    }
+
 }
