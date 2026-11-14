@@ -26,6 +26,7 @@ pub fn open() -> Result<Connection> {
     let mut connection = Connection::open(path)?;
     connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
     migrate(&mut connection)?;
+    crate::routines::ensure_schema(&connection)?;
     Ok(connection)
 }
 
