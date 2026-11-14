@@ -1,4 +1,5 @@
 mod db;
+mod domain;
 
 use gtk::prelude::*;
 use gtk::{
