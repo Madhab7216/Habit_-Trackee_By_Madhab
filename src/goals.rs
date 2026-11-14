@@ -192,7 +192,7 @@ pub fn list_goals(connection: &Connection, include_archived: bool) -> Result<Vec
             (SELECT COUNT(*) FROM goal_habits gh
                 WHERE gh.goal_id = g.id)
          FROM goals g
-         WHERE (?1 = 1 OR g.status <> 'archived')
+         WHERE ((?1 = 1 AND g.status = 'archived') OR (?1 = 0 AND g.status <> 'archived'))
          ORDER BY
             CASE g.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1
                  WHEN 'completed' THEN 2 ELSE 3 END,
@@ -200,7 +200,7 @@ pub fn list_goals(connection: &Connection, include_archived: bool) -> Result<Vec
             g.target_date, g.id DESC",
     )?;
 
-    let rows = statement.query_map([i64::from(include_archived)], |row| {
+    let rows = statement.query_map([if include_archived { 1_i64 } else { 0_i64 }], |row| {
         let total: i64 = row.get(5)?;
         let completed: i64 = row.get(6)?;
         let skipped: i64 = row.get(7)?;
@@ -216,9 +216,9 @@ pub fn list_goals(connection: &Connection, include_archived: bool) -> Result<Vec
             description: row.get(2)?,
             target_date: row.get(3)?,
             status: row.get(4)?,
-            milestone_total: total as u32,
-            milestone_completed: completed as u32,
-            milestone_skipped: skipped as u32,
+            milestone_total: u32::try_from(total).unwrap_or(u32::MAX),
+            milestone_completed: u32::try_from(completed).unwrap_or(u32::MAX),
+            milestone_skipped: u32::try_from(skipped).unwrap_or(u32::MAX),
             linked_habits: row.get::<_, i64>(8)? as u32,
             progress_percent,
         })
@@ -281,17 +281,14 @@ pub fn set_milestone_status(connection: &Connection, milestone_id: i64, status: 
             "unsupported milestone status".to_string(),
         ));
     }
-    let completed_at = if status == "completed" {
-        "CURRENT_TIMESTAMP"
-    } else {
-        "NULL"
-    };
-    let sql = format!(
+    let changed = connection.execute(
         "UPDATE goal_milestones
-         SET status = ?1, completed_at = {completed_at}, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?2"
-    );
-    let changed = connection.execute(&sql, params![status, milestone_id])?;
+         SET status = ?1,
+             completed_at = CASE WHEN ?1 = 'completed' THEN CURRENT_TIMESTAMP ELSE NULL END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?2",
+        params![status, milestone_id],
+    )?;
     if changed == 0 {
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
@@ -406,11 +403,13 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     let add_mode = Rc::clone(&archived_mode);
     let archived_for_add = archived_button.clone();
     add_button.connect_clicked(move |_| {
+        let goal_title = add_title.text().to_string();
+        let goal_date = add_date.text().to_string();
         match create_goal(
             &add_connection.borrow(),
-            &add_title.text(),
+            &goal_title,
             "",
-            Some(add_date.text().trim()),
+            Some(goal_date.trim()),
         ) {
             Ok(_) => {
                 add_title.set_text("");
@@ -501,6 +500,7 @@ fn refresh_goal_list(
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         let milestones_button = gtk::Button::with_label("Milestones");
         let edit_button = gtk::Button::with_label("Edit");
+        edit_button.set_sensitive(!archived_view);
         actions.append(&milestones_button);
         actions.append(&edit_button);
 
@@ -664,12 +664,15 @@ fn open_goal_editor(
     let save_feedback = feedback.clone();
     let goal_id = goal.id;
     save.connect_clicked(move |_| {
+        let title_value = save_title.text().to_string();
+        let description_value = save_description.text().to_string();
+        let date_value = save_date.text().to_string();
         match update_goal(
             &save_connection.borrow(),
             goal_id,
-            &save_title.text(),
-            &save_description.text(),
-            Some(save_date.text().trim()),
+            &title_value,
+            &description_value,
+            Some(date_value.trim()),
         ) {
             Ok(()) => {
                 save_editor.close();
@@ -741,12 +744,14 @@ fn open_milestones_window(
     let add_date = date_entry.clone();
     let add_feedback = feedback.clone();
     add_button.connect_clicked(move |_| {
+        let milestone_title = add_title.text().to_string();
+        let milestone_date = add_date.text().to_string();
         match create_milestone(
             &add_connection.borrow(),
             goal_id,
-            &add_title.text(),
+            &milestone_title,
             "",
-            Some(add_date.text().trim()),
+            Some(milestone_date.trim()),
         ) {
             Ok(_) => {
                 add_title.set_text("");
