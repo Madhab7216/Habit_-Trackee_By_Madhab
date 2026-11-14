@@ -6,7 +6,7 @@ use gtk::{
     Application, ApplicationWindow, Button, Entry, HeaderBar, Label, ListBox, ListBoxRow,
     Orientation, ScrolledWindow,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::{Cell, RefCell}, rc::Rc};
 
 const APP_ID: &str = "org.madhab.habittracker";
 
@@ -74,8 +74,10 @@ fn build_ui(application: &Application) {
     habit_entry.set_hexpand(true);
     let add_button = Button::with_label("Add habit");
     add_button.add_css_class("suggested-action");
+    let archive_view_button = Button::with_label("View archived");
     form.append(&habit_entry);
     form.append(&add_button);
+    form.append(&archive_view_button);
 
     let list = ListBox::new();
     list.set_selection_mode(gtk::SelectionMode::None);
@@ -85,7 +87,7 @@ fn build_ui(application: &Application) {
     scroller.set_child(Some(&list));
 
     let footer = Label::new(Some(
-        "M3 foundation · Offline tracking · Your data stays on this device",
+        "M3 · Reversible habit management · Offline tracking · Your data stays on this device",
     ));
     footer.add_css_class("dim-label");
     footer.set_xalign(0.0);
@@ -97,31 +99,66 @@ fn build_ui(application: &Application) {
     page.append(&footer);
     window.set_child(Some(&page));
 
+    let archived_mode = Rc::new(Cell::new(false));
     let add_state = Rc::clone(&state);
     let add_list = list.clone();
     let add_entry = habit_entry.clone();
+    let add_parent = window.clone();
+    let add_mode = Rc::clone(&archived_mode);
+    let archive_button_for_add = archive_view_button.clone();
     add_button.connect_clicked(move |_| {
         let name = add_entry.text().trim().to_string();
         if name.is_empty() {
             return;
         }
         match db::create_habit(&add_state.connection.borrow(), &name) {
-            Ok(()) => add_entry.set_text(""),
+            Ok(()) => {
+                add_entry.set_text("");
+                add_mode.set(false);
+                archive_button_for_add.set_label("View archived");
+            }
             Err(error) => eprintln!("Could not save habit: {error}"),
         }
-        refresh_list(&add_list, &add_state);
+        refresh_list(&add_list, &add_state, &add_parent, false);
     });
 
-    refresh_list(&list, &state);
+    let toggle_mode = Rc::clone(&archived_mode);
+    let toggle_state = Rc::clone(&state);
+    let toggle_list = list.clone();
+    let toggle_parent = window.clone();
+    let toggle_label = archive_view_button.clone();
+    archive_view_button.connect_clicked(move |_| {
+        let show_archived = !toggle_mode.get();
+        toggle_mode.set(show_archived);
+        toggle_label.set_label(if show_archived {
+            "Back to today"
+        } else {
+            "View archived"
+        });
+        refresh_list(&toggle_list, &toggle_state, &toggle_parent, show_archived);
+    });
+
+    refresh_list(&list, &state, &window, false);
     window.present();
 }
 
-fn refresh_list(list: &ListBox, state: &Rc<AppState>) {
+fn refresh_list(
+    list: &ListBox,
+    state: &Rc<AppState>,
+    parent: &ApplicationWindow,
+    archived_view: bool,
+) {
     while let Some(child) = list.first_child() {
         list.remove(&child);
     }
 
-    let habits = match db::today_habits(&state.connection.borrow()) {
+    let habits = if archived_view {
+        db::archived_habits(&state.connection.borrow())
+    } else {
+        db::today_habits(&state.connection.borrow())
+    };
+
+    let habits = match habits {
         Ok(habits) => habits,
         Err(error) => {
             append_message(list, &format!("Could not load habits: {error}"));
@@ -130,7 +167,14 @@ fn refresh_list(list: &ListBox, state: &Rc<AppState>) {
     };
 
     if habits.is_empty() {
-        append_message(list, "No habits yet. Add one above to begin.");
+        append_message(
+            list,
+            if archived_view {
+                "No archived habits."
+            } else {
+                "No habits yet. Add one above to begin."
+            },
+        );
         return;
     }
 
@@ -144,57 +188,178 @@ fn refresh_list(list: &ListBox, state: &Rc<AppState>) {
         let name = Label::new(Some(&habit.name));
         name.set_xalign(0.0);
         name.set_hexpand(true);
-        if habit.completed || habit.paused {
-            name.add_css_class("dim-label");
+        row_content.append(&name);
+
+        if archived_view {
+            let status = Label::new(Some("Archived"));
+            status.add_css_class("dim-label");
+            let restore_button = Button::with_label("Restore");
+            let restore_state = Rc::clone(state);
+            let restore_list = list.clone();
+            let restore_parent = parent.clone();
+            let habit_id = habit.id;
+            restore_button.connect_clicked(move |_| {
+                if let Err(error) =
+                    db::restore_habit(&restore_state.connection.borrow(), habit_id)
+                {
+                    eprintln!("Could not restore habit: {error}");
+                }
+                refresh_list(&restore_list, &restore_state, &restore_parent, true);
+            });
+            row_content.append(&status);
+            row_content.append(&restore_button);
+        } else {
+            let status = Label::new(Some(if habit.paused {
+                "Paused"
+            } else if habit.completed {
+                "Completed"
+            } else {
+                "Due today"
+            }));
+            status.add_css_class("dim-label");
+
+            let edit_button = Button::with_label("Edit");
+            let edit_state = Rc::clone(state);
+            let edit_list = list.clone();
+            let edit_parent = parent.clone();
+            let habit_id = habit.id;
+            let current_name = habit.name.clone();
+            edit_button.connect_clicked(move |_| {
+                show_edit_window(
+                    &edit_parent,
+                    &edit_list,
+                    &edit_state,
+                    habit_id,
+                    &current_name,
+                );
+            });
+
+            let action = Button::with_label(if habit.completed { "Undo" } else { "Mark done" });
+            action.set_sensitive(!habit.paused);
+            let action_state = Rc::clone(state);
+            let action_list = list.clone();
+            let action_parent = parent.clone();
+            let habit_id = habit.id;
+            let completed = habit.completed;
+            action.connect_clicked(move |_| {
+                if let Err(error) = db::set_today_completed(
+                    &action_state.connection.borrow(),
+                    habit_id,
+                    !completed,
+                ) {
+                    eprintln!("Could not update habit: {error}");
+                }
+                refresh_list(&action_list, &action_state, &action_parent, false);
+            });
+
+            let pause_action = Button::with_label(if habit.paused { "Resume" } else { "Pause" });
+            let pause_state = Rc::clone(state);
+            let pause_list = list.clone();
+            let pause_parent = parent.clone();
+            let pause_habit_id = habit.id;
+            let paused = habit.paused;
+            pause_action.connect_clicked(move |_| {
+                if let Err(error) =
+                    db::set_paused(&pause_state.connection.borrow(), pause_habit_id, !paused)
+                {
+                    eprintln!("Could not change pause state: {error}");
+                }
+                refresh_list(&pause_list, &pause_state, &pause_parent, false);
+            });
+
+            let archive_action = Button::with_label("Archive");
+            let archive_state = Rc::clone(state);
+            let archive_list = list.clone();
+            let archive_parent = parent.clone();
+            let archive_habit_id = habit.id;
+            archive_action.connect_clicked(move |_| {
+                if let Err(error) =
+                    db::archive_habit(&archive_state.connection.borrow(), archive_habit_id)
+                {
+                    eprintln!("Could not archive habit: {error}");
+                }
+                refresh_list(&archive_list, &archive_state, &archive_parent, false);
+            });
+
+            row_content.append(&status);
+            row_content.append(&edit_button);
+            row_content.append(&action);
+            row_content.append(&pause_action);
+            row_content.append(&archive_action);
         }
 
-        let status = Label::new(Some(if habit.paused {
-            "Paused"
-        } else if habit.completed {
-            "Completed"
-        } else {
-            "Due today"
-        }));
-        status.add_css_class("dim-label");
-
-        let action = Button::with_label(if habit.completed { "Undo" } else { "Mark done" });
-        action.set_sensitive(!habit.paused);
-
-        let action_state = Rc::clone(state);
-        let action_list = list.clone();
-        let habit_id = habit.id;
-        let completed = habit.completed;
-        action.connect_clicked(move |_| {
-            if let Err(error) =
-                db::set_today_completed(&action_state.connection.borrow(), habit_id, !completed)
-            {
-                eprintln!("Could not update habit: {error}");
-            }
-            refresh_list(&action_list, &action_state);
-        });
-
-        let pause_action = Button::with_label(if habit.paused { "Resume" } else { "Pause" });
-        let pause_state = Rc::clone(state);
-        let pause_list = list.clone();
-        let pause_habit_id = habit.id;
-        let paused = habit.paused;
-        pause_action.connect_clicked(move |_| {
-            if let Err(error) =
-                db::set_paused(&pause_state.connection.borrow(), pause_habit_id, !paused)
-            {
-                eprintln!("Could not change pause state: {error}");
-            }
-            refresh_list(&pause_list, &pause_state);
-        });
-
-        row_content.append(&name);
-        row_content.append(&status);
-        row_content.append(&action);
-        row_content.append(&pause_action);
         let row = ListBoxRow::new();
         row.set_child(Some(&row_content));
         list.append(&row);
     }
+}
+
+fn show_edit_window(
+    parent: &ApplicationWindow,
+    list: &ListBox,
+    state: &Rc<AppState>,
+    habit_id: i64,
+    current_name: &str,
+) {
+    let editor = gtk::Window::builder()
+        .title("Edit habit")
+        .transient_for(parent)
+        .modal(true)
+        .default_width(420)
+        .default_height(180)
+        .build();
+
+    let content = gtk::Box::new(Orientation::Vertical, 12);
+    content.set_margin_top(20);
+    content.set_margin_bottom(20);
+    content.set_margin_start(20);
+    content.set_margin_end(20);
+
+    let label = Label::new(Some("Habit name"));
+    label.set_xalign(0.0);
+    let entry = Entry::new();
+    entry.set_text(current_name);
+    entry.set_activates_default(true);
+    let feedback = Label::new(None);
+    feedback.set_xalign(0.0);
+    feedback.add_css_class("error");
+
+    let actions = gtk::Box::new(Orientation::Horizontal, 8);
+    actions.set_halign(gtk::Align::End);
+    let cancel_button = Button::with_label("Cancel");
+    let save_button = Button::with_label("Save");
+    save_button.add_css_class("suggested-action");
+    actions.append(&cancel_button);
+    actions.append(&save_button);
+
+    content.append(&label);
+    content.append(&entry);
+    content.append(&feedback);
+    content.append(&actions);
+    editor.set_child(Some(&content));
+
+    let save_editor = editor.clone();
+    let save_state = Rc::clone(state);
+    let save_list = list.clone();
+    let save_parent = parent.clone();
+    let save_entry = entry.clone();
+    let save_feedback = feedback.clone();
+    save_button.connect_clicked(move |_| {
+        let name = save_entry.text().to_string();
+        match db::rename_habit(&save_state.connection.borrow(), habit_id, &name) {
+            Ok(()) => {
+                save_editor.close();
+                refresh_list(&save_list, &save_state, &save_parent, false);
+            }
+            Err(error) => save_feedback.set_text(&format!("Could not save habit: {error}")),
+        }
+    });
+
+    let cancel_editor = editor.clone();
+    cancel_button.connect_clicked(move |_| cancel_editor.close());
+
+    editor.present();
+    entry.grab_focus();
 }
 
 fn append_message(list: &ListBox, message: &str) {
