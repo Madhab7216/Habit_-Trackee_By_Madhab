@@ -54,6 +54,13 @@ Audit date: 2026-11-14
 - Restore never replaces the live app database.
 - Export is a read-transaction snapshot and includes the milestones table when present.
 
+## Localization increment
+
+- English and Bengali gettext catalogs cover the Today, habit lifecycle, Goals and Milestones UI.
+- Language preference is stored under `ui_language` in the existing SQLite `settings` table; it is applied on application restart.
+- Catalog source/coverage, UTF-8 MO loading, locale normalization, and settings persistence have automated tests.
+- Progress Calendar, Data Management, and companion CLI localization are outside this increment because those interfaces are developed in separate branches.
+
 ## Validation boundary
 
 Earlier M3 and M5 workflow runs passed all relevant engineering checks on their own branch heads. M6's first dedicated run failed only the formatting gate for one import layout in `src/portability.rs`; that formatting delta has been corrected in the consolidation blob.
@@ -65,7 +72,7 @@ A new CI run must complete on the exact latest PR #1 head before the combined in
 1. Verify newest-head GitHub Actions results.
 2. Complete target Linux Mint install/build/launch and upgrade tests.
 3. Add a full schedule editor and effective-date versioning/confirmation so schedule changes do not silently reinterpret past periods.
-4. Finish Bengali/English localization and keyboard/screen-reader accessibility.
+4. Extend Bengali/English catalogs to additional screens and companion tools delivered by separate workstreams; complete keyboard/screen-reader accessibility review on the target Linux Mint desktop.
 5. Add goal-to-task/routine workflows, weekly reviews and richer calendar analytics.
 6. Add a GTK export/backup dialog, retention guidance and recovery UX around the CLI.
 7. Implement IANA timezone selection and DST/travel-safe scheduling.
