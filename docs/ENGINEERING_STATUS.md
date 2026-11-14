@@ -1,57 +1,92 @@
 # Habit Trackers by Madhab — Engineering Status
 
-Audit date: 2026-11-14 (latest repository review)
+Audit date: 2026-11-14
 
 ## Live GitHub state
 
 - Repository: `Madhab7216/Habit_-Trackee_By_Madhab`
-- Default branch: `main` (the original README-only baseline remains unchanged).
+- Default branch: `main`; it remains the original README-only baseline.
 - Active implementation branch: `work/linux-mint-habit-tracker-foundation`
-- Current feature-branch head at this review: `4abc792c26c5379bf072c83ec420fcaee372d308`
-- Pull request: [#1 — M0–M2 foundation: native GTK4 habit tracker starter](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1) — open, draft, not merged.
-- Target-machine validation issue: [#2 — validate the GTK/Rust build on the target Linux Mint workstation](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/2) — open.
-- PR #1 currently contains 24 commits across 14 files. Keep it in draft until CI is green and Linux Mint validation is recorded.
+- Feature-branch head at this review: `d2fd820e6ed82b08d580ad20d43bd27797ce57a1`
+- Pull request: [#1 — GTK4 habit tracker foundation](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1) — open, draft, not merged.
+- PR #1 currently contains 34 commits, 15 changed files, 1,674 additions and 2 deletions.
+- [Issue #2](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/2): target Linux Mint workstation validation — open.
+- [Issue #3](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/3): remaining advanced workflows — open.
 
-## Implemented in the feature branch
+Keep PR #1 in draft. Do not merge until the latest Rust checks and the actual Linux Mint workstation validation pass.
 
-- Rust + GTK 4 native Linux desktop starter.
-- Local SQLite database under XDG data directory / user data directory.
-- Versioned initial schema with constraints, indexes, and foreign-key enforcement.
-- Pure Rust domain module for civil dates, daily/weekday/every-N-days/weekly schedules, adherence, EMA habit-strength estimate, and streak rules.
-- Basic Today screen with add daily binary habit and complete/undo.
-- Python SQLite schema tests and GitHub Actions workflow.
-- Read-only Linux Mint environment audit script.
-- Product blueprint, scope freeze, prototype boundary, and roadmap.
+## Implemented and present in the feature branch
 
-## Additional code-review fixes committed during this review
+- Native Rust + GTK 4 Linux desktop starter.
+- Local SQLite persistence under the user's XDG data directory / home data directory.
+- Versioned migrations: initial schema (v1) and pause-period history (v2).
+- Initial habit types and schedule fields in the schema: binary, numeric, duration, count, limit and frequency; daily, selected weekdays, every-N-days and times-per-week.
+- Pure Rust domain rules for civil dates, schedule evaluation, adherence, EMA habit-strength estimate and streak calculation.
+- Today screen: add a daily binary habit, mark complete, undo, pause and resume.
+- Pause history is retained; only one open pause per habit is allowed; check-ins are blocked while paused.
+- Unit and schema tests, GitHub Actions workflow, and read-only Linux Mint environment audit script.
+- Product blueprint, scope decisions and prototype-boundary documentation.
 
-1. Weekly targets are now constrained to 1–7 completions per ISO week. A target of 8 or higher is rejected; regression coverage was added.
-2. Data-directory resolution now accepts only absolute `XDG_DATA_HOME` / `HOME` paths. If neither is usable, startup fails with an explicit storage error rather than writing private app data into the current working directory. Three path-resolution regression tests were added.
+## Important boundary: implemented is not the same as integrated
 
-The two code changes were committed separately to the feature branch; neither modifies `main`.
+The schedule/scoring engine is not yet wired into the Today screen, habit forms, persisted check-ins or analytics. The UI still creates daily binary habits only. Numeric/duration/count/limit/frequency tracking, edit/archive/restore, partial/skipped entry forms and full schedule editing are not complete.
 
-## CI evidence and current gate
+The current pause/resume implementation is a first M3 slice, not a finished habit-management system.
 
-- Earlier workflow run #7 (push) and run #9 (pull request) completed successfully on earlier feature-branch commits.
-- Some intervening runs were cancelled because newer commits superseded them. One earlier run failed at `cargo fmt --all -- --check`; a later run passed all three workflow jobs.
-- Latest observed run #16 for head `4abc792c`: SQLite schema tests and audit-script syntax checks passed; Rust format/build/test/Clippy job was still in progress at the time of this audit.
-- Do not describe the current PR as fully CI-green until run #16 or a newer run completes successfully.
+## CI status
 
-## Remaining release blockers
+For the current head, workflow run #25 has:
+- SQLite schema tests: passed.
+- Linux audit-script syntax check: passed.
+- Rust format/build/unit-test/Clippy job: not yet confirmed green at the time of this status update.
 
-1. Confirm the latest Rust job passes formatting, compile, unit tests, and Clippy.
-2. Run the read-only audit and actual build/launch smoke test on the target Linux Mint workstation (Issue #2).
-3. Wire the pure schedule/domain rules into the SQLite repository and GTK flows; the current visible UI still creates daily binary habits only.
-4. Implement full habit editing, pause/resume, archive/restore, numeric/duration/count/limit tracking, and partial/skipped entry states.
-5. Add Bengali/English localization and keyboard/screen-reader accessibility review.
-6. Implement 7-day analytics and goals/routine workflows.
-7. Add user-initiated CSV export and consistent SQLite backup/restore tests.
-8. Finalize package/install/update testing on the supported Linux Mint release.
-9. Choose and add an explicit open-source license before inviting outside contributions.
+An earlier head failed the format check because three lines in the new storage tests did not match rustfmt. The formatting was corrected in a follow-up commit. Check the live [Actions page](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions) for the final result; do not describe the branch as fully CI-green until every job for the current head succeeds.
 
-## Product and safety boundaries
+## Remaining engineering work
 
-- The app is separate from Madhab OS.
-- Core tracking remains offline-first and local-only; there is no cloud, telemetry, or remote AI in the MVP.
-- Habit descriptions and notes may be sensitive. Do not upload the live SQLite database or private records into issues, PR comments, or diagnostics.
-- Keep PR #1 as draft until the stated gates have passed. Do not merge into `main` solely because a hosted schema check succeeded.
+### M3 — Complete habit management and measurement
+1. Create/edit/archive/restore/delete (with confirmation) workflows.
+2. Binary, numeric/count, duration, limit/avoid and frequency-goal check-ins with unit and direction validation.
+3. Connect stored schedule definitions to `domain.rs`; derive due/unscheduled states correctly.
+4. Distinguish completed, partial, skipped, missed, paused and not-scheduled periods.
+5. Add migration and integration tests for every workflow.
+
+### M4 — Scoring integration
+1. Feed persisted eligible periods to the scoring engine.
+2. Show adherence, habit-strength estimate and streak separately, with clear explanations.
+3. Version scoring and test deterministic history replay, schedule changes and pauses.
+4. Ensure lower-is-better limit habits never reward higher consumption.
+
+### M5 — Productivity and analytics
+- Calendar / heatmap, 7-day and monthly summaries, trends and target progress.
+- Link habits to long-term goals; add routines, milestones and review notes.
+- User-controlled reminders, quiet hours and notification preferences.
+
+### M6 — Data ownership, privacy, localization and accessibility
+- Bengali and English gettext catalogs for every shipped screen.
+- Keyboard navigation, accessible names, focus order, scalable text, contrast and screen-reader review.
+- User-initiated CSV export and consistent SQLite backup/restore.
+- Protect local data and keep habit names/notes out of logs. No telemetry or cloud requirement for core tracking.
+
+### M7 — Release engineering
+- Read-only audit and build/launch/persistence smoke test on the actual supported Linux Mint machine (Issue #2).
+- Package, install, update and uninstall verification; document supported Linux Mint versions.
+- Add dependency/security review and release checklist.
+- Select and add a license before accepting outside contributions.
+
+## Product research baseline
+
+- [Loop Habit Tracker](https://github.com/iSoron/uhabits): a strong open-source reference for flexible schedules, reminders, widgets, history, CSV/SQLite export and offline privacy.
+- [OpenHabitTracker](https://openhabittracker.net/): a useful reference for calendar/history/statistical charts, target progress and daily summary reminders.
+- [GTK 4 accessibility guidance](https://docs.gtk.org/gtk4/section-accessibility.html): prefer accessible GTK widgets and provide labels/descriptions for custom UI.
+- [GTK Rust book](https://gtk-rs.org/gtk4-rs/stable/latest/book/): use gettext-based localization for Bengali and English.
+- [SQLite Online Backup API](https://sqlite.org/backup.html): use a consistent database snapshot rather than copying a live SQLite file.
+- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/): keep user data in an absolute XDG data directory (default `$HOME/.local/share`).
+
+## Privacy and safety boundaries
+
+- This app is separate from Madhab OS.
+- MVP core functions stay offline and local-only; no remote AI, cloud sync or telemetry.
+- Habit labels, notes and history can be sensitive. Never upload the user's live database or real habit history into issues, PR comments or CI artifacts.
+- Do not merge into `main` based only on schema-test success.
+- The repository has no selected license. Public visibility alone does not grant permission to reuse or redistribute the code.
