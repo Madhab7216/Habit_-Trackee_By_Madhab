@@ -4,7 +4,7 @@ pub mod domain;
 pub mod goals;
 pub mod portability;
 
-use crate::{data_ui, domain::Cadence};
+use crate::domain::Cadence;
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Button, Entry, HeaderBar, Label, ListBox, ListBoxRow,
