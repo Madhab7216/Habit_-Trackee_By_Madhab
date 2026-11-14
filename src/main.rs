@@ -6,7 +6,10 @@ use gtk::{
     Application, ApplicationWindow, Button, Entry, HeaderBar, Label, ListBox, ListBoxRow,
     Orientation, ScrolledWindow,
 };
-use std::{cell::{Cell, RefCell}, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 const APP_ID: &str = "org.madhab.habittracker";
 
@@ -199,9 +202,7 @@ fn refresh_list(
             let restore_parent = parent.clone();
             let habit_id = habit.id;
             restore_button.connect_clicked(move |_| {
-                if let Err(error) =
-                    db::restore_habit(&restore_state.connection.borrow(), habit_id)
-                {
+                if let Err(error) = db::restore_habit(&restore_state.connection.borrow(), habit_id) {
                     eprintln!("Could not restore habit: {error}");
                 }
                 refresh_list(&restore_list, &restore_state, &restore_parent, true);
@@ -242,11 +243,9 @@ fn refresh_list(
             let habit_id = habit.id;
             let completed = habit.completed;
             action.connect_clicked(move |_| {
-                if let Err(error) = db::set_today_completed(
-                    &action_state.connection.borrow(),
-                    habit_id,
-                    !completed,
-                ) {
+                if let Err(error) =
+                    db::set_today_completed(&action_state.connection.borrow(), habit_id, !completed)
+                {
                     eprintln!("Could not update habit: {error}");
                 }
                 refresh_list(&action_list, &action_state, &action_parent, false);
