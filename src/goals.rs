@@ -332,7 +332,6 @@ pub fn unlink_habit_from_goal(connection: &Connection, goal_id: i64, habit_id: i
     Ok(())
 }
 
-
 /// A non-archived habit and its current relationship to a goal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkableHabit {
@@ -739,7 +738,6 @@ fn refresh_goal_list(
     }
 }
 
-
 /// Let users select the unarchived habits that support a goal.
 /// Saving replaces the complete selection atomically; Cancel never writes changes.
 fn open_goal_habits_window(
@@ -851,12 +849,7 @@ fn open_goal_habits_window(
         match result {
             Ok(()) => {
                 save_window.close();
-                refresh_goal_list(
-                    &save_list,
-                    &save_parent,
-                    &save_connection,
-                    archived_view,
-                );
+                refresh_goal_list(&save_list, &save_parent, &save_connection, archived_view);
             }
             Err(error) => {
                 save_feedback.set_text(&format!("Could not save habit links: {error}"));
@@ -1258,22 +1251,35 @@ mod tests {
         assert_eq!(list_goals(&connection, false).unwrap()[0].linked_habits, 0);
     }
 
-
     #[test]
     fn linkable_habit_picker_excludes_archived_habits_and_marks_existing_links() {
         let connection = test_connection();
         let goal_id = goal(&connection);
         connection
-            .execute("INSERT INTO habits(name) VALUES ('Read 20 pages'), ('Run'), ('Archived habit')", [])
+            .execute(
+                "INSERT INTO habits(name) VALUES ('Read 20 pages'), ('Run'), ('Archived habit')",
+                [],
+            )
             .unwrap();
         let read_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Read 20 pages'", [], |row| row.get(0))
+            .query_row(
+                "SELECT id FROM habits WHERE name = 'Read 20 pages'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         let archived_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Archived habit'", [], |row| row.get(0))
+            .query_row(
+                "SELECT id FROM habits WHERE name = 'Archived habit'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         connection
-            .execute("UPDATE habits SET archived_at = CURRENT_TIMESTAMP WHERE id = ?1", [archived_id])
+            .execute(
+                "UPDATE habits SET archived_at = CURRENT_TIMESTAMP WHERE id = ?1",
+                [archived_id],
+            )
             .unwrap();
         link_habit_to_goal(&connection, goal_id, read_id).unwrap();
 
@@ -1291,19 +1297,31 @@ mod tests {
         let mut connection = test_connection();
         let goal_id = goal(&connection);
         connection
-            .execute("INSERT INTO habits(name) VALUES ('Read'), ('Run'), ('Archived')", [])
+            .execute(
+                "INSERT INTO habits(name) VALUES ('Read'), ('Run'), ('Archived')",
+                [],
+            )
             .unwrap();
         let read_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Read'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Read'", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         let run_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Run'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Run'", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         let archived_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Archived'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Archived'", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         connection
-            .execute("UPDATE habits SET archived_at = CURRENT_TIMESTAMP WHERE id = ?1", [archived_id])
+            .execute(
+                "UPDATE habits SET archived_at = CURRENT_TIMESTAMP WHERE id = ?1",
+                [archived_id],
+            )
             .unwrap();
 
         set_goal_habit_links(&mut connection, goal_id, &[read_id]).unwrap();
