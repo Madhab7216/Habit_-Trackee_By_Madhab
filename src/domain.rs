@@ -39,7 +39,7 @@ impl CivilDate {
         let mut year = self.year;
         let month = i32::from(self.month);
         let day = i32::from(self.day);
-        year -= i32::from(month <= 2);
+        year -= if month <= 2 { 1 } else { 0 };
         let era = year.div_euclid(400);
         let year_of_era = year - era * 400;
         let adjusted_month = month + if month > 2 { -3 } else { 9 };
