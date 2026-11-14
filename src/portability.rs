@@ -156,10 +156,16 @@ pub fn verify_database(connection: &Connection) -> PortabilityResult<i64> {
         if routine_version > 1 {
             return Err(invalid_data(format!(
                 "unsupported routine schema version {routine_version}"
-            )).into());
+            ))
+            .into());
         }
         if routine_version >= 1 {
-            for required_table in ["routines", "routine_steps", "routine_runs", "routine_run_steps"] {
+            for required_table in [
+                "routines",
+                "routine_steps",
+                "routine_runs",
+                "routine_run_steps",
+            ] {
                 let exists: bool = connection.query_row(
                     "SELECT EXISTS(
                         SELECT 1 FROM sqlite_master
@@ -171,7 +177,8 @@ pub fn verify_database(connection: &Connection) -> PortabilityResult<i64> {
                 if !exists {
                     return Err(invalid_data(format!(
                         "routine schema is missing required table {required_table}"
-                    )).into());
+                    ))
+                    .into());
                 }
             }
         }
@@ -531,7 +538,10 @@ mod tests {
             .execute_batch(include_str!("../migrations/0004_routines.sql"))
             .expect("apply routine schema");
         connection
-            .execute("INSERT INTO routine_schema_migrations(version) VALUES (1)", [])
+            .execute(
+                "INSERT INTO routine_schema_migrations(version) VALUES (1)",
+                [],
+            )
             .expect("record routine schema version");
         connection
             .execute(
@@ -597,7 +607,9 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM routines", [], |row| row.get(0))
             .expect("count restored routines");
         let routine_run_step_count: i64 = restored
-            .query_row("SELECT COUNT(*) FROM routine_run_steps", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM routine_run_steps", [], |row| {
+                row.get(0)
+            })
             .expect("count restored routine run steps");
 
         assert_eq!(habit_name, "Drink \"water\", slowly\nand consistently");
