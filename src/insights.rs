@@ -308,7 +308,11 @@ pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection
     page.append(&habits_title);
     page.append(&habits_scroller);
     page.append(&explanation);
-    window.set_child(Some(&page));
+
+    // The 90-day grid can be taller than a compact laptop display.
+    let page_scroller = gtk::ScrolledWindow::new();
+    page_scroller.set_child(Some(&page));
+    window.set_child(Some(&page_scroller));
 
     for (label, range_days) in [("7 days", 7_u16), ("30 days", 30), ("90 days", 90)] {
         let button = Button::with_label(label);
