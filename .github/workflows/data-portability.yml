@@ -2,7 +2,7 @@ name: Data portability checks
 
 on:
   push:
-    branches: ["work/m6-data-portability"]
+    branches: ["work/m6-data-portability-current"]
   workflow_dispatch:
 
 permissions:
