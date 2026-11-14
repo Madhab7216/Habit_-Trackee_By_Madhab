@@ -3,10 +3,10 @@
 //! Scores are computed from source entries on demand. No materialized score cache
 //! can become stale when entries, pause periods or the active schedule change.
 use crate::domain::{
-    adherence, achievement_ratio, current_streak, update_strength, Cadence, CivilDate,
-    Direction, HabitSchedule, PeriodResult,
+    Cadence, CivilDate, Direction, HabitSchedule, PeriodResult, achievement_ratio, adherence,
+    current_streak, update_strength,
 };
-use rusqlite::{params, Connection, Result};
+use rusqlite::{Connection, Result, params};
 use std::collections::BTreeMap;
 
 pub const SCORING_VERSION: u8 = 1;
@@ -135,13 +135,17 @@ fn load_active_habits(connection: &Connection) -> Result<Vec<HabitConfig>> {
             .map_err(|_| scoring_data_error("schedule definition"))?;
 
         if cadence_is_weekly(cadence) && tracking_type != "frequency" {
-            return Err(scoring_data_error("times_per_week requires frequency tracking"));
+            return Err(scoring_data_error(
+                "times_per_week requires frequency tracking",
+            ));
         }
         if !cadence_is_weekly(cadence)
             && tracking_type != "binary"
             && target_value.is_none_or(|target| !target.is_finite() || target <= 0.0)
         {
-            return Err(scoring_data_error("measured habit requires a finite positive target"));
+            return Err(scoring_data_error(
+                "measured habit requires a finite positive target",
+            ));
         }
 
         Ok(HabitConfig {
@@ -228,8 +232,8 @@ fn summarize_habit(
     }
 
     let results: Vec<PeriodResult> = evaluations.iter().map(|item| item.result).collect();
-    let adherence_value = adherence(&results)
-        .map_err(|error| scoring_data_error(&format!("adherence: {error}")))?;
+    let adherence_value =
+        adherence(&results).map_err(|error| scoring_data_error(&format!("adherence: {error}")))?;
 
     let mut strength = None;
     for result in &results {
@@ -338,8 +342,8 @@ fn build_period_buckets(
     let mut buckets: BTreeMap<i64, PeriodBucket> = BTreeMap::new();
 
     for ordinal in start..stop {
-        let date = CivilDate::from_ordinal(ordinal)
-            .ok_or_else(|| scoring_data_error("date range"))?;
+        let date =
+            CivilDate::from_ordinal(ordinal).ok_or_else(|| scoring_data_error("date range"))?;
         if let Some(period) = schedule.period_for(date) {
             let day = ScheduledDay {
                 paused: pauses.iter().any(|pause| pause.contains(date)),
@@ -360,7 +364,6 @@ fn build_period_buckets(
     Ok(buckets)
 }
 
-
 fn period_is_closed(schedule: HabitSchedule, bucket: &PeriodBucket, as_of: CivilDate) -> bool {
     let natural_end = bucket.period_start + i64::from(bucket.span_days) - 1;
     let scheduled_end = schedule
@@ -377,11 +380,11 @@ fn evaluate_period(config: &HabitConfig, bucket: &PeriodBucket) -> Result<Period
     evaluate_daily_period(config, bucket)
 }
 
-fn evaluate_daily_period(
-    config: &HabitConfig,
-    bucket: &PeriodBucket,
-) -> Result<PeriodEvaluation> {
-    let day = bucket.days.first().ok_or_else(|| scoring_data_error("empty daily period"))?;
+fn evaluate_daily_period(config: &HabitConfig, bucket: &PeriodBucket) -> Result<PeriodEvaluation> {
+    let day = bucket
+        .days
+        .first()
+        .ok_or_else(|| scoring_data_error("empty daily period"))?;
     if day.paused {
         return Ok(PeriodEvaluation {
             result: PeriodResult::Paused,
@@ -411,10 +414,7 @@ fn evaluate_daily_period(
     }
 }
 
-fn evaluate_weekly_period(
-    config: &HabitConfig,
-    bucket: &PeriodBucket,
-) -> Result<PeriodEvaluation> {
+fn evaluate_weekly_period(config: &HabitConfig, bucket: &PeriodBucket) -> Result<PeriodEvaluation> {
     let target = match config.schedule.cadence() {
         Cadence::TimesPerWeek { target } => f64::from(target),
         _ => return Err(scoring_data_error("weekly cadence")),
@@ -429,7 +429,13 @@ fn evaluate_weekly_period(
     }
 
     let all_days_skipped = bucket.days.iter().filter(|day| !day.paused).all(|day| {
-        matches!(day.entry, Some(Entry { status: EntryStatus::Skipped, .. }))
+        matches!(
+            day.entry,
+            Some(Entry {
+                status: EntryStatus::Skipped,
+                ..
+            })
+        )
     });
     if all_days_skipped {
         return Ok(PeriodEvaluation {
@@ -488,7 +494,9 @@ fn entry_ratio(config: &HabitConfig, entry: Entry) -> Result<f64> {
     }
 
     if config.tracking_type == "frequency" {
-        return Err(scoring_data_error("frequency tracking needs a weekly schedule"));
+        return Err(scoring_data_error(
+            "frequency tracking needs a weekly schedule",
+        ));
     }
     let actual = entry
         .value
@@ -530,13 +538,23 @@ mod tests {
         start: &str,
         target_per_period: Option<i64>,
     ) -> i64 {
-        connection.execute(
-            "INSERT INTO habits
+        connection
+            .execute(
+                "INSERT INTO habits
                 (name, tracking_type, direction, target_value, schedule_type,
                  target_per_period, start_date)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![name, tracking_type, direction, target, schedule, target_per_period, start],
-        ).expect("insert test habit");
+                params![
+                    name,
+                    tracking_type,
+                    direction,
+                    target,
+                    schedule,
+                    target_per_period,
+                    start
+                ],
+            )
+            .expect("insert test habit");
         connection.last_insert_rowid()
     }
 
@@ -547,17 +565,28 @@ mod tests {
         status: &str,
         value: Option<f64>,
     ) {
-        connection.execute(
-            "INSERT INTO habit_entries(habit_id, local_date, status, value)
+        connection
+            .execute(
+                "INSERT INTO habit_entries(habit_id, local_date, status, value)
              VALUES (?1, ?2, ?3, ?4)",
-            params![habit_id, date, status, value],
-        ).expect("insert test entry");
+                params![habit_id, date, status, value],
+            )
+            .expect("insert test entry");
     }
 
     #[test]
     fn daily_binary_replay_counts_missed_and_excludes_open_today() {
         let connection = test_connection();
-        let id = add_habit(&connection, "Read", "binary", "at_least", None, "daily", "2026-11-01", None);
+        let id = add_habit(
+            &connection,
+            "Read",
+            "binary",
+            "at_least",
+            None,
+            "daily",
+            "2026-11-01",
+            None,
+        );
         add_entry(&connection, id, "2026-11-01", "completed", Some(1.0));
         add_entry(&connection, id, "2026-11-02", "skipped", None);
         add_entry(&connection, id, "2026-11-04", "completed", Some(1.0));
@@ -567,7 +596,8 @@ mod tests {
             &connection,
             load_active_habits(&connection).unwrap().remove(0),
             date(2026, 11, 15),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.scoring_version, 1);
         assert_eq!(result.closed_periods, 14);
@@ -580,7 +610,16 @@ mod tests {
     #[test]
     fn at_most_measurement_scores_higher_consumption_lower() {
         let connection = test_connection();
-        let id = add_habit(&connection, "Screen time", "limit", "at_most", Some(120.0), "daily", "2026-11-01", None);
+        let id = add_habit(
+            &connection,
+            "Screen time",
+            "limit",
+            "at_most",
+            Some(120.0),
+            "daily",
+            "2026-11-01",
+            None,
+        );
         add_entry(&connection, id, "2026-11-01", "completed", Some(90.0));
         add_entry(&connection, id, "2026-11-02", "partial", Some(180.0));
 
@@ -594,20 +633,32 @@ mod tests {
     #[test]
     fn skips_and_full_pause_periods_are_excluded_from_adherence() {
         let connection = test_connection();
-        let id = add_habit(&connection, "Exercise", "binary", "at_least", None, "daily", "2026-11-01", None);
+        let id = add_habit(
+            &connection,
+            "Exercise",
+            "binary",
+            "at_least",
+            None,
+            "daily",
+            "2026-11-01",
+            None,
+        );
         add_entry(&connection, id, "2026-11-01", "completed", Some(1.0));
         add_entry(&connection, id, "2026-11-02", "skipped", None);
-        connection.execute(
-            "INSERT INTO habit_pause_periods(habit_id, starts_on, ends_on)
+        connection
+            .execute(
+                "INSERT INTO habit_pause_periods(habit_id, starts_on, ends_on)
              VALUES (?1, '2026-11-03', '2026-11-05')",
-            [id],
-        ).unwrap();
+                [id],
+            )
+            .unwrap();
 
         let result = summarize_habit(
             &connection,
             load_active_habits(&connection).unwrap().remove(0),
             date(2026, 11, 6),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.closed_periods, 5);
         assert_eq!(result.scored_periods, 2);
@@ -619,20 +670,32 @@ mod tests {
     #[test]
     fn weekly_frequency_accumulates_sessions_and_prorates_paused_days() {
         let connection = test_connection();
-        let id = add_habit(&connection, "Workouts", "frequency", "at_least", None, "times_per_week", "2026-11-02", Some(3));
+        let id = add_habit(
+            &connection,
+            "Workouts",
+            "frequency",
+            "at_least",
+            None,
+            "times_per_week",
+            "2026-11-02",
+            Some(3),
+        );
         add_entry(&connection, id, "2026-11-02", "completed", Some(1.0));
         add_entry(&connection, id, "2026-11-04", "completed", Some(1.0));
-        connection.execute(
-            "INSERT INTO habit_pause_periods(habit_id, starts_on, ends_on)
+        connection
+            .execute(
+                "INSERT INTO habit_pause_periods(habit_id, starts_on, ends_on)
              VALUES (?1, '2026-11-03', '2026-11-04')",
-            [id],
-        ).unwrap();
+                [id],
+            )
+            .unwrap();
 
         let result = summarize_habit(
             &connection,
             load_active_habits(&connection).unwrap().remove(0),
             date(2026, 11, 10),
-        ).unwrap();
+        )
+        .unwrap();
 
         // Six active days out of seven means a target of 3 * 6/7.
         assert!((result.adherence.unwrap() - (2.0 / (3.0 * 6.0 / 7.0))).abs() < 1e-12);
@@ -669,12 +732,22 @@ mod tests {
     #[test]
     fn weekly_current_period_is_not_missed_before_it_closes() {
         let connection = test_connection();
-        let id = add_habit(&connection, "Weekly writing", "frequency", "at_least", None, "times_per_week", "2026-11-02", Some(3));
+        let id = add_habit(
+            &connection,
+            "Weekly writing",
+            "frequency",
+            "at_least",
+            None,
+            "times_per_week",
+            "2026-11-02",
+            Some(3),
+        );
         let result = summarize_habit(
             &connection,
             load_active_habits(&connection).unwrap().remove(0),
             date(2026, 11, 6),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.closed_periods, 0);
         assert_eq!(result.missed_periods, 0);
@@ -684,7 +757,16 @@ mod tests {
     #[test]
     fn no_history_returns_empty_metrics_not_zero_percent() {
         let connection = test_connection();
-        add_habit(&connection, "New habit", "binary", "at_least", None, "daily", "2026-11-14", None);
+        add_habit(
+            &connection,
+            "New habit",
+            "binary",
+            "at_least",
+            None,
+            "daily",
+            "2026-11-14",
+            None,
+        );
         let summaries = summaries_for_date(&connection, date(2026, 11, 14)).unwrap();
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].adherence, None);
