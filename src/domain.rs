@@ -44,8 +44,7 @@ impl CivilDate {
         let year_of_era = year - era * 400;
         let adjusted_month = month + if month > 2 { -3 } else { 9 };
         let day_of_year = (153 * adjusted_month + 2) / 5 + day - 1;
-        let day_of_era =
-            year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+        let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
         i64::from(era * 146_097 + day_of_era - 719_468)
     }
 
@@ -57,7 +56,11 @@ impl CivilDate {
 
 impl fmt::Display for CivilDate {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{:04}-{:02}-{:02}", self.year, self.month, self.day)
+        write!(
+            formatter,
+            "{:04}-{:02}-{:02}",
+            self.year, self.month, self.day
+        )
     }
 }
 
@@ -79,10 +82,18 @@ fn days_in_month(year: i32, month: u8) -> u8 {
 pub enum Cadence {
     Daily,
     /// Bit 0 = Monday through bit 6 = Sunday.
-    Weekdays { weekday_mask: u8 },
-    EveryNDays { interval: u16 },
+    Weekdays {
+        weekday_mask: u8,
+    },
+    EveryNDays {
+        interval: u16,
+    },
+
     /// The user may complete the habit on any day, but is evaluated once per ISO week.
-    TimesPerWeek { target: u8 },
+    TimesPerWeek {
+        target: u8,
+    },
+
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,7 +151,11 @@ impl HabitSchedule {
             _ => {}
         }
 
-        Ok(Self { cadence, start, end })
+        Ok(Self {
+            cadence,
+            start,
+            end,
+        })
     }
 
     pub fn cadence(self) -> Cadence {
@@ -375,12 +390,9 @@ mod tests {
 
     #[test]
     fn every_n_days_is_anchored_to_start_date() {
-        let schedule = HabitSchedule::new(
-            Cadence::EveryNDays { interval: 2 },
-            date(2026, 11, 1),
-            None,
-        )
-        .unwrap();
+        let schedule =
+            HabitSchedule::new(Cadence::EveryNDays { interval: 2 }, date(2026, 11, 1), None)
+                .unwrap();
         assert!(schedule.period_for(date(2026, 11, 1)).is_some());
         assert!(schedule.period_for(date(2026, 11, 3)).is_some());
         assert!(schedule.period_for(date(2026, 11, 4)).is_none());
@@ -388,12 +400,9 @@ mod tests {
 
     #[test]
     fn times_per_week_uses_one_monday_anchored_period() {
-        let schedule = HabitSchedule::new(
-            Cadence::TimesPerWeek { target: 3 },
-            date(2026, 11, 1),
-            None,
-        )
-        .unwrap();
+        let schedule =
+            HabitSchedule::new(Cadence::TimesPerWeek { target: 3 }, date(2026, 11, 1), None)
+                .unwrap();
         let monday = schedule.period_for(date(2026, 11, 9)).unwrap();
         let friday = schedule.period_for(date(2026, 11, 13)).unwrap();
         assert_eq!(monday, friday);
@@ -403,12 +412,9 @@ mod tests {
 
     #[test]
     fn date_bounds_are_respected() {
-        let schedule = HabitSchedule::new(
-            Cadence::Daily,
-            date(2026, 11, 10),
-            Some(date(2026, 11, 12)),
-        )
-        .unwrap();
+        let schedule =
+            HabitSchedule::new(Cadence::Daily, date(2026, 11, 10), Some(date(2026, 11, 12)))
+                .unwrap();
         assert!(schedule.period_for(date(2026, 11, 9)).is_none());
         assert!(schedule.period_for(date(2026, 11, 12)).is_some());
         assert!(schedule.period_for(date(2026, 11, 13)).is_none());
@@ -426,30 +432,18 @@ mod tests {
             ScheduleError::InvalidWeekdayMask
         );
         assert_eq!(
-            HabitSchedule::new(
-                Cadence::EveryNDays { interval: 0 },
-                date(2026, 11, 1),
-                None
-            )
-            .unwrap_err(),
+            HabitSchedule::new(Cadence::EveryNDays { interval: 0 }, date(2026, 11, 1), None)
+                .unwrap_err(),
             ScheduleError::InvalidInterval
         );
         assert_eq!(
-            HabitSchedule::new(
-                Cadence::TimesPerWeek { target: 0 },
-                date(2026, 11, 1),
-                None
-            )
-            .unwrap_err(),
+            HabitSchedule::new(Cadence::TimesPerWeek { target: 0 }, date(2026, 11, 1), None)
+                .unwrap_err(),
             ScheduleError::InvalidWeeklyTarget
         );
         assert_eq!(
-            HabitSchedule::new(
-                Cadence::TimesPerWeek { target: 8 },
-                date(2026, 11, 1),
-                None
-            )
-            .unwrap_err(),
+            HabitSchedule::new(Cadence::TimesPerWeek { target: 8 }, date(2026, 11, 1), None)
+                .unwrap_err(),
             ScheduleError::InvalidWeeklyTarget
         );
     }
@@ -495,8 +489,9 @@ mod tests {
             update_strength(None, PeriodResult::Achievement(0.8), 0.25).unwrap(),
             Some(0.8)
         );
-        let updated =
-            update_strength(Some(0.8), PeriodResult::Achievement(0.4), 0.25).unwrap().unwrap();
+        let updated = update_strength(Some(0.8), PeriodResult::Achievement(0.4), 0.25)
+            .unwrap()
+            .unwrap();
         assert!((updated - 0.7).abs() < 1e-12);
         assert_eq!(
             update_strength(Some(0.7), PeriodResult::Skipped, 0.25).unwrap(),
