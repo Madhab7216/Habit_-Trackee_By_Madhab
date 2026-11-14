@@ -38,7 +38,9 @@ fn build_ui(application: &Application) {
         }
     };
 
-    let state = Rc::new(AppState { connection: RefCell::new(connection) });
+    let state = Rc::new(AppState {
+        connection: RefCell::new(connection),
+    });
     let window = ApplicationWindow::builder()
         .application(application)
         .title("Habit Trackers by Madhab")
@@ -81,7 +83,9 @@ fn build_ui(application: &Application) {
     scroller.set_vexpand(true);
     scroller.set_child(Some(&list));
 
-    let footer = Label::new(Some("M2 starter · Offline tracking · Your data stays on this device"));
+    let footer = Label::new(Some(
+        "M2 starter · Offline tracking · Your data stays on this device",
+    ));
     footer.add_css_class("dim-label");
     footer.set_xalign(0.0);
 
@@ -142,7 +146,11 @@ fn refresh_list(list: &ListBox, state: &Rc<AppState>) {
         if habit.completed {
             name.add_css_class("dim-label");
         }
-        let status = Label::new(Some(if habit.completed { "Completed" } else { "Due today" }));
+        let status = Label::new(Some(if habit.completed {
+            "Completed"
+        } else {
+            "Due today"
+        }));
         status.add_css_class("dim-label");
         let action = Button::with_label(if habit.completed { "Undo" } else { "Mark done" });
 
@@ -151,11 +159,9 @@ fn refresh_list(list: &ListBox, state: &Rc<AppState>) {
         let habit_id = habit.id;
         let completed = habit.completed;
         action.connect_clicked(move |_| {
-            if let Err(error) = db::set_today_completed(
-                &action_state.connection.borrow(),
-                habit_id,
-                !completed,
-            ) {
+            if let Err(error) =
+                db::set_today_completed(&action_state.connection.borrow(), habit_id, !completed)
+            {
                 eprintln!("Could not update habit: {error}");
             }
             refresh_list(&action_list, &action_state);
