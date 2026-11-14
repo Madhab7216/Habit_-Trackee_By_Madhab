@@ -1,6 +1,6 @@
-mod db;
+pub mod db;
 pub mod domain;
-mod goals;
+pub mod goals;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
