@@ -24,6 +24,15 @@ A privacy-first, offline-first native habit and personal productivity app for Li
 - Date and schedule rules are enforced in the data layer, not only by disabled UI controls.
 - The domain layer includes higher-is-better/at-least and lower-is-better/at-most measurement normalization and separate adherence, EMA habit-strength and streak metrics.
 
+### Persisted progress scoring (M4)
+- Open **Progress & scores** from the Today window.
+- Rebuilds adherence, EMA habit-strength estimate and current streak from local saved check-ins and pause history.
+- Displays scoring version, closed/scored periods, missed, skipped and paused counts.
+- Does not count an open current day/week as missed.
+- Handles at-least and at-most measures; lower-is-better limits never reward higher consumption.
+- Weekly-frequency sessions accumulate toward the quota; a partially paused week has a proportionally reduced target.
+- Scores are derived on demand from the source records; no score cache, network request or telemetry is introduced.
+
 ### Goals and milestones (M5)
 - Create, edit, pause/resume, complete, archive and restore goals.
 - Add dated or undated milestones.
@@ -98,6 +107,7 @@ If neither path is an absolute usable location, the app refuses to place persona
 - Launch and exercise the app on the actual supported Linux Mint workstation; CI compile is not a substitute.
 - Complete Bengali/English localization, keyboard/screen-reader accessibility, timezone/DST behavior and packaging.
 - Add effective-dated schedule history or explicit confirmation before schedule edits change historical scoring.
+- Complete and validate the M4 persisted scoring PR on its latest head; hosted CI does not replace a target Linux Mint GUI test.
 - Choose and add an explicit open-source license before accepting external contributions.
 
 The primary feature branch is tracked by open Draft PR #1. It has not been merged into `main`.
