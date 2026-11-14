@@ -99,6 +99,7 @@ If neither path is an absolute usable location, the app refuses to place persona
 - [M3 schedule integration](docs/M3_SCHEDULE_INTEGRATION.md)
 - [Goals and milestones](docs/M5_GOALS_MILESTONES.md)
 - [Scoring policy](docs/SCORING_POLICY.md)
+- [M4 persisted scoring](docs/M4_PERSISTED_SCORING.md)
 - [Data portability](docs/DATA_PORTABILITY.md)
 
 ## Release blockers
