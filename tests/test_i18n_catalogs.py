@@ -26,6 +26,7 @@ class LocalizationCatalogTests(unittest.TestCase):
         bengali = parse_po(ROOT / "locale/bn/LC_MESSAGES" / (DOMAIN + ".po"))
         self.assertEqual(set(english), set(bengali))
         self.assertTrue(all(value for value in bengali.values()))
+        self.assertIn("charset=UTF-8", bengali[""])
 
     def test_compiled_catalogs_load_with_utf8_and_expected_translations(self):
         for language, expected in (("en", "Today"), ("bn", "আজ")):

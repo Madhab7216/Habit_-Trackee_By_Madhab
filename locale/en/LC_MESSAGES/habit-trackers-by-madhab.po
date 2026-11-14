@@ -1,5 +1,5 @@
 msgid ""
-msgstr "Project-Id-Version: Habit Trackers by Madhab 0.1.0\\nLanguage: en\\nMIME-Version: 1.0\\nContent-Type: text/plain; charset=UTF-8\\nContent-Transfer-Encoding: 8bit\\nPlural-Forms: nplurals=2; plural=(n != 1);\\n"
+msgstr "Project-Id-Version: Habit Trackers by Madhab 0.1.0\nLanguage: en\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\nPlural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgid "The local database could not be opened. See the terminal for details."
 msgstr "The local database could not be opened. See the terminal for details."
