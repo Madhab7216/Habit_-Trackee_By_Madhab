@@ -114,11 +114,10 @@ pub fn load_report(
     }
 
     let offset = format!("-{} days", range_days - 1);
-    let start_date: String = connection.query_row(
-        "SELECT date(?1, ?2)",
-        params![end_date, offset],
-        |row| row.get(0),
-    )?;
+    let start_date: String =
+        connection.query_row("SELECT date(?1, ?2)", params![end_date, offset], |row| {
+            row.get(0)
+        })?;
     if parse_iso_date(&start_date).is_none() {
         return Err(invalid_input("could not calculate report start date"));
     }
@@ -156,6 +155,7 @@ pub fn load_report(
             ))
         })?;
         let collected = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        drop(statement);
         collected
     };
 
@@ -220,10 +220,7 @@ pub fn load_report(
     let completed = days.iter().map(|day| day.completed).sum();
     let partial = days.iter().map(|day| day.partial).sum();
     let skipped = days.iter().map(|day| day.skipped).sum();
-    let days_with_records = days
-        .iter()
-        .filter(|day| day.total_entries() > 0)
-        .count();
+    let days_with_records = days.iter().filter(|day| day.total_entries() > 0).count();
 
     Ok(ActivityReport {
         start_date,
@@ -239,10 +236,7 @@ pub fn load_report(
     })
 }
 
-pub fn open_window(
-    parent: &ApplicationWindow,
-    connection: Rc<RefCell<Connection>>,
-) {
+pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection>>) {
     let window = gtk::Window::builder()
         .title("Progress calendar & insights")
         .transient_for(parent)
@@ -362,11 +356,9 @@ fn refresh_view(
     habits_list: &gtk::Box,
 ) {
     let database = connection.borrow();
-    let end_date = match database.query_row(
-        "SELECT date('now', 'localtime')",
-        [],
-        |row| row.get::<_, String>(0),
-    ) {
+    let end_date = match database.query_row("SELECT date('now', 'localtime')", [], |row| {
+        row.get::<_, String>(0)
+    }) {
         Ok(value) => value,
         Err(error) => {
             summary.set_text(&format!("Could not read the local date: {error}"));
@@ -399,11 +391,7 @@ fn refresh_view(
     populate_habit_summary(&report, habits_list);
 }
 
-fn populate_calendar(
-    report: &ActivityReport,
-    calendar: &Grid,
-    selected_day: &Label,
-) {
+fn populate_calendar(report: &ActivityReport, calendar: &Grid, selected_day: &Label) {
     while let Some(child) = calendar.first_child() {
         calendar.remove(&child);
     }
