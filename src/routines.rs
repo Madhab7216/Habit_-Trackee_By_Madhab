@@ -5,8 +5,8 @@
 //! habit check-ins automatically.
 
 use crate::domain::CivilDate;
-use gtk::prelude::*;
 use gtk::ApplicationWindow;
+use gtk::prelude::*;
 use rusqlite::{Connection, OptionalExtension, Result, params};
 use std::{
     cell::{Cell, RefCell},
