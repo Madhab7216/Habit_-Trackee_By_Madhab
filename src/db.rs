@@ -1,5 +1,5 @@
 use crate::domain::{Cadence, CivilDate, HabitSchedule};
-use rusqlite::{Connection, Result, params};
+use rusqlite::{Connection, OptionalExtension, Result, params};
 use std::{env, fs, path::PathBuf};
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
@@ -14,6 +14,21 @@ pub struct TodayHabit {
     pub paused: bool,
     /// False means the habit is intentionally not due on the requested local date.
     pub scheduled: bool,
+}
+
+pub fn get_setting(connection: &Connection, key: &str) -> Result<Option<String>> {
+    connection
+        .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| row.get(0))
+        .optional()
+}
+
+pub fn set_setting(connection: &Connection, key: &str, value: &str) -> Result<()> {
+    connection.execute(
+        "INSERT INTO settings(key, value, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
+        params![key, value],
+    )?;
+    Ok(())
 }
 
 pub fn open() -> Result<Connection> {
@@ -765,4 +780,14 @@ mod tests {
                 .is_empty()
         );
     }
+    #[test]
+    fn settings_round_trip_and_update_without_schema_migration() {
+        let connection = memory_connection();
+        assert_eq!(get_setting(&connection, "ui_language").unwrap(), None);
+        set_setting(&connection, "ui_language", "bn").unwrap();
+        assert_eq!(get_setting(&connection, "ui_language").unwrap().as_deref(), Some("bn"));
+        set_setting(&connection, "ui_language", "en").unwrap();
+        assert_eq!(get_setting(&connection, "ui_language").unwrap().as_deref(), Some("en"));
+    }
+
 }

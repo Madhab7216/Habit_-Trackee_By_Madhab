@@ -1,6 +1,7 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod i18n;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
@@ -20,6 +21,11 @@ struct AppState {
 }
 
 fn main() {
+    let preferred_language = db::open()
+        .ok()
+        .and_then(|connection| db::get_setting(&connection, "ui_language").ok().flatten());
+    i18n::initialize(preferred_language.as_deref());
+
     let application = Application::builder().application_id(APP_ID).build();
     application.connect_activate(build_ui);
     application.run();
@@ -37,7 +43,7 @@ fn build_ui(application: &Application) {
                 .default_height(180)
                 .build();
             window.set_child(Some(&Label::new(Some(
-                "The local database could not be opened. See the terminal for details.",
+                &i18n::tr("The local database could not be opened. See the terminal for details."),
             ))));
             window.present();
             return;
@@ -55,7 +61,7 @@ fn build_ui(application: &Application) {
         .build();
 
     let header = HeaderBar::new();
-    header.set_title_widget(Some(&Label::new(Some("Madhab Habit Tracker"))));
+    header.set_title_widget(Some(&Label::new(Some(&i18n::tr("Madhab Habit Tracker")))));
     let goals_button = Button::with_label("Goals & milestones");
     let goals_parent = window.clone();
     let goals_connection = Rc::clone(&state.connection);
@@ -71,32 +77,36 @@ fn build_ui(application: &Application) {
     page.set_margin_start(28);
     page.set_margin_end(28);
 
-    let title = Label::new(Some("Today"));
+    let title = Label::new(Some(&i18n::tr("Today")));
     title.add_css_class("title-1");
     title.set_xalign(0.0);
-    let subtitle = Label::new(Some(
+    let subtitle = Label::new(Some(&i18n::tr(
         "Small actions, steady progress. Your data stays on this device.",
-    ));
+    )));
     subtitle.add_css_class("dim-label");
     subtitle.set_xalign(0.0);
 
     let form = gtk::Box::new(Orientation::Horizontal, 8);
     let habit_entry = Entry::new();
-    habit_entry.set_placeholder_text(Some("Add a habit…"));
+    habit_entry.set_placeholder_text(Some(&i18n::tr("Add a habit…")));
     habit_entry.set_hexpand(true);
-    let schedule_picker = gtk::DropDown::from_strings(&[
-        "Every day",
-        "Monday to Friday",
-        "Every 2 days",
-        "Times per week",
-    ]);
+    let schedule_labels = [
+        i18n::tr("Every day"),
+        i18n::tr("Monday to Friday"),
+        i18n::tr("Every 2 days"),
+        i18n::tr("Times per week"),
+    ];
+    let schedule_refs = schedule_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let schedule_picker = gtk::DropDown::from_strings(&schedule_refs);
     schedule_picker.set_selected(0);
     let weekly_target = gtk::SpinButton::with_range(1.0, 7.0, 1.0);
     weekly_target.set_value(3.0);
-    weekly_target.set_tooltip_text(Some("Weekly session target (1–7), used for Times per week"));
-    let add_button = Button::with_label("Add habit");
+    weekly_target.set_tooltip_text(Some(&i18n::tr(
+        "Weekly session target (1–7), used for Times per week",
+    )));
+    let add_button = Button::with_label(&i18n::tr("Add habit"));
     add_button.add_css_class("suggested-action");
-    let archive_view_button = Button::with_label("View archived");
+    let archive_view_button = Button::with_label(&i18n::tr("View archived"));
     form.append(&habit_entry);
     form.append(&schedule_picker);
     form.append(&weekly_target);
@@ -110,18 +120,44 @@ fn build_ui(application: &Application) {
     scroller.set_vexpand(true);
     scroller.set_child(Some(&list));
 
-    let footer = Label::new(Some(
+    let footer = Label::new(Some(&i18n::tr(
         "M3 · Reversible habit management · Offline tracking · Your data stays on this device",
-    ));
+    )));
     footer.add_css_class("dim-label");
     footer.set_xalign(0.0);
 
+    let language_row = gtk::Box::new(Orientation::Horizontal, 8);
+    let language_label = Label::new(Some(&i18n::tr("Language")));
+    let language_picker = gtk::DropDown::from_strings(&["English", "বাংলা"]);
+    language_picker.set_selected(match i18n::current_language() {
+        i18n::Language::English => 0,
+        i18n::Language::Bengali => 1,
+    });
+    language_row.append(&language_label);
+    language_row.append(&language_picker);
+
     page.append(&title);
     page.append(&subtitle);
+    page.append(&language_row);
     page.append(&form);
     page.append(&scroller);
     page.append(&footer);
     window.set_child(Some(&page));
+
+    let language_connection = Rc::clone(&state.connection);
+    let language_feedback = footer.clone();
+    language_picker.connect_selected_notify(move |picker| {
+        let code = if picker.selected() == 1 { "bn" } else { "en" };
+        match db::set_setting(&language_connection.borrow(), "ui_language", code) {
+            Ok(()) => language_feedback.set_text(&i18n::tr(
+                "Language saved. Restart the app to apply.",
+            )),
+            Err(error) => language_feedback.set_text(&i18n::format(
+                "Could not save language preference: {0}",
+                &[&i18n::error(&error)],
+            )),
+        }
+    });
 
     let archived_mode = Rc::new(Cell::new(false));
     let add_state = Rc::clone(&state);
@@ -155,7 +191,7 @@ fn build_ui(application: &Application) {
             Ok(()) => {
                 add_entry.set_text("");
                 add_mode.set(false);
-                archive_button_for_add.set_label("View archived");
+                archive_button_for_add.set_label(&i18n::tr("View archived"));
             }
             Err(error) => eprintln!("Could not save habit: {error}"),
         }
@@ -170,11 +206,12 @@ fn build_ui(application: &Application) {
     archive_view_button.connect_clicked(move |_| {
         let show_archived = !toggle_mode.get();
         toggle_mode.set(show_archived);
-        toggle_label.set_label(if show_archived {
-            "Back to today"
+        let label = if show_archived {
+            i18n::tr("Back to today")
         } else {
-            "View archived"
-        });
+            i18n::tr("View archived")
+        };
+        toggle_label.set_label(&label);
         refresh_list(&toggle_list, &toggle_state, &toggle_parent, show_archived);
     });
 
@@ -201,7 +238,10 @@ fn refresh_list(
     let habits = match habits {
         Ok(habits) => habits,
         Err(error) => {
-            append_message(list, &format!("Could not load habits: {error}"));
+            append_message(
+                list,
+                &i18n::format("Could not load habits: {0}", &[&i18n::error(&error)]),
+            );
             return;
         }
     };
@@ -210,9 +250,9 @@ fn refresh_list(
         append_message(
             list,
             if archived_view {
-                "No archived habits."
+                &i18n::tr("No archived habits.")
             } else {
-                "No habits yet. Add one above to begin."
+                &i18n::tr("No habits yet. Add one above to begin.")
             },
         );
         return;
@@ -231,9 +271,9 @@ fn refresh_list(
         row_content.append(&name);
 
         if archived_view {
-            let status = Label::new(Some("Archived"));
+            let status = Label::new(Some(&i18n::tr("Archived")));
             status.add_css_class("dim-label");
-            let restore_button = Button::with_label("Restore");
+            let restore_button = Button::with_label(&i18n::tr("Restore"));
             let restore_state = Rc::clone(state);
             let restore_list = list.clone();
             let restore_parent = parent.clone();
@@ -248,18 +288,19 @@ fn refresh_list(
             row_content.append(&status);
             row_content.append(&restore_button);
         } else {
-            let status = Label::new(Some(if habit.paused {
-                "Paused"
+            let status_text = if habit.paused {
+                i18n::tr("Paused")
             } else if habit.completed {
-                "Completed"
+                i18n::tr("Completed")
             } else if !habit.scheduled {
-                "Not scheduled"
+                i18n::tr("Not scheduled")
             } else {
-                "Due today"
-            }));
+                i18n::tr("Due today")
+            };
+            let status = Label::new(Some(&status_text));
             status.add_css_class("dim-label");
 
-            let edit_button = Button::with_label("Edit");
+            let edit_button = Button::with_label(&i18n::tr("Edit"));
             let edit_state = Rc::clone(state);
             let edit_list = list.clone();
             let edit_parent = parent.clone();
@@ -275,7 +316,12 @@ fn refresh_list(
                 );
             });
 
-            let action = Button::with_label(if habit.completed { "Undo" } else { "Mark done" });
+            let action_label = if habit.completed {
+                i18n::tr("Undo")
+            } else {
+                i18n::tr("Mark done")
+            };
+            let action = Button::with_label(&action_label);
             action.set_sensitive(habit.completed || (!habit.paused && habit.scheduled));
             let action_state = Rc::clone(state);
             let action_list = list.clone();
@@ -291,7 +337,12 @@ fn refresh_list(
                 refresh_list(&action_list, &action_state, &action_parent, false);
             });
 
-            let pause_action = Button::with_label(if habit.paused { "Resume" } else { "Pause" });
+            let pause_label = if habit.paused {
+                i18n::tr("Resume")
+            } else {
+                i18n::tr("Pause")
+            };
+            let pause_action = Button::with_label(&pause_label);
             let pause_state = Rc::clone(state);
             let pause_list = list.clone();
             let pause_parent = parent.clone();
@@ -306,7 +357,7 @@ fn refresh_list(
                 refresh_list(&pause_list, &pause_state, &pause_parent, false);
             });
 
-            let archive_action = Button::with_label("Archive");
+            let archive_action = Button::with_label(&i18n::tr("Archive"));
             let archive_state = Rc::clone(state);
             let archive_list = list.clone();
             let archive_parent = parent.clone();
@@ -341,7 +392,7 @@ fn show_edit_window(
     current_name: &str,
 ) {
     let editor = gtk::Window::builder()
-        .title("Edit habit")
+        .title(i18n::tr("Edit habit"))
         .transient_for(parent)
         .modal(true)
         .default_width(420)
@@ -354,7 +405,7 @@ fn show_edit_window(
     content.set_margin_start(20);
     content.set_margin_end(20);
 
-    let label = Label::new(Some("Habit name"));
+    let label = Label::new(Some(&i18n::tr("Habit name")));
     label.set_xalign(0.0);
     let entry = Entry::new();
     entry.set_text(current_name);
@@ -365,8 +416,8 @@ fn show_edit_window(
 
     let actions = gtk::Box::new(Orientation::Horizontal, 8);
     actions.set_halign(gtk::Align::End);
-    let cancel_button = Button::with_label("Cancel");
-    let save_button = Button::with_label("Save");
+    let cancel_button = Button::with_label(&i18n::tr("Cancel"));
+    let save_button = Button::with_label(&i18n::tr("Save"));
     save_button.add_css_class("suggested-action");
     actions.append(&cancel_button);
     actions.append(&save_button);
@@ -390,7 +441,10 @@ fn show_edit_window(
                 save_editor.close();
                 refresh_list(&save_list, &save_state, &save_parent, false);
             }
-            Err(error) => save_feedback.set_text(&format!("Could not save habit: {error}")),
+            Err(error) => save_feedback.set_text(&i18n::format(
+                "Could not save habit: {0}",
+                &[&i18n::error(&error)],
+            )),
         }
     });
 
