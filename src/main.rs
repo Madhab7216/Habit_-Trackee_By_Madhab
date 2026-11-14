@@ -215,6 +215,8 @@ fn refresh_list(
                 "Paused"
             } else if habit.completed {
                 "Completed"
+            } else if !habit.scheduled {
+                "Not scheduled"
             } else {
                 "Due today"
             }));
@@ -237,7 +239,7 @@ fn refresh_list(
             });
 
             let action = Button::with_label(if habit.completed { "Undo" } else { "Mark done" });
-            action.set_sensitive(!habit.paused);
+            action.set_sensitive(habit.completed || (!habit.paused && habit.scheduled));
             let action_state = Rc::clone(state);
             let action_list = list.clone();
             let action_parent = parent.clone();
