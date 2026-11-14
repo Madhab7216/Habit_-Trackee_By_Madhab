@@ -398,7 +398,9 @@ mod tests {
         let connection = memory_connection();
         create_habit(&connection, "Read").expect("create habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Read'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Read'", [], |row| {
+                row.get(0)
+            })
             .expect("read habit id");
         set_today_completed(&connection, habit_id, true).expect("complete habit");
 
@@ -414,7 +416,9 @@ mod tests {
         let connection = memory_connection();
         create_habit(&connection, "Walk").expect("create habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Walk'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Walk'", [], |row| {
+                row.get(0)
+            })
             .expect("read habit id");
         set_today_completed(&connection, habit_id, true).expect("complete habit");
 
@@ -437,7 +441,9 @@ mod tests {
         let connection = memory_connection();
         create_habit(&connection, "Journal").expect("create habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Journal'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Journal'", [], |row| {
+                row.get(0)
+            })
             .expect("read habit id");
 
         assert!(rename_habit(&connection, habit_id, "   ").is_err());
@@ -450,5 +456,4 @@ mod tests {
         assert!(archive_habit(&connection, 999).is_err());
         assert!(restore_habit(&connection, 999).is_err());
     }
-
 }
