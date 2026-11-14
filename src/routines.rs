@@ -6,6 +6,7 @@
 
 use crate::domain::CivilDate;
 use gtk::prelude::*;
+use gtk::ApplicationWindow;
 use rusqlite::{Connection, OptionalExtension, Result, params};
 use std::{
     cell::{Cell, RefCell},
@@ -120,7 +121,7 @@ fn invalid_input(message: &str) -> rusqlite::Error {
     rusqlite::Error::InvalidParameterName(message.to_string())
 }
 
-fn validate_title(value: &str, label: &str, max: usize) -> Result<&str> {
+fn validate_title<'a>(value: &'a str, label: &str, max: usize) -> Result<&'a str> {
     let normalized = value.trim();
     if normalized.is_empty() || normalized.chars().count() > max {
         return Err(invalid_input(&format!(
