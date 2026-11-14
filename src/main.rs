@@ -2,6 +2,7 @@ mod db;
 pub mod domain;
 mod goals;
 
+use crate::domain::Cadence;
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Button, Entry, HeaderBar, Label, ListBox, ListBoxRow,
