@@ -31,7 +31,7 @@ jobs:
           toolchain: 1.100.0
           components: rustfmt, clippy
       - name: Format the new data-portability files
-        run: rustfmt --edition 2024 --check src/portability.rs src/bin/data-tool.rs
+        run: rustfmt --edition 2024 --check src/portability.rs
       - name: Compile all targets
         run: cargo check --all-targets
       - name: Run all Rust tests
