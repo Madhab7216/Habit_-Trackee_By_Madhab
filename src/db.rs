@@ -203,9 +203,7 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
         let start_date = civil_date_from_row(row, 6, "start_date")?;
         let end_date = row
             .get::<_, Option<String>>(7)?
-            .map(|value| {
-                parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("end_date"))
-            })
+            .map(|value| parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("end_date")))
             .transpose()?;
         let schedule = HabitSchedule::new(cadence, start_date, end_date)
             .map_err(|_| invalid_schedule_field("schedule bounds"))?;
@@ -256,11 +254,7 @@ fn cadence_from_row(row: &rusqlite::Row<'_>) -> Result<Cadence> {
     }
 }
 
-fn civil_date_from_row(
-    row: &rusqlite::Row<'_>,
-    index: usize,
-    field: &str,
-) -> Result<CivilDate> {
+fn civil_date_from_row(row: &rusqlite::Row<'_>, index: usize, field: &str) -> Result<CivilDate> {
     let value: String = row.get(index)?;
     parse_civil_date(&value).ok_or_else(|| invalid_schedule_field(field))
 }
@@ -563,7 +557,9 @@ mod tests {
     fn new_habit(connection: &Connection, name: &str) -> i64 {
         create_habit(connection, name).expect("create habit");
         connection
-            .query_row("SELECT id FROM habits WHERE name = ?1", [name], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = ?1", [name], |row| {
+                row.get(0)
+            })
             .expect("read habit id")
     }
 
@@ -571,11 +567,13 @@ mod tests {
     fn persisted_weekday_schedule_only_marks_selected_days() {
         let connection = memory_connection();
         let habit_id = new_habit(&connection, "Walk");
-        connection.execute(
-            "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
+        connection
+            .execute(
+                "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
                 start_date = '2026-11-01' WHERE id = ?1",
-            [habit_id],
-        ).expect("set Monday-only schedule");
+                [habit_id],
+            )
+            .expect("set Monday-only schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 16)).unwrap()[0].scheduled);
         assert!(!habits_for_date(&connection, date(2026, 11, 15)).unwrap()[0].scheduled);
@@ -585,11 +583,13 @@ mod tests {
     fn every_n_days_uses_start_anchor_and_date_bounds() {
         let connection = memory_connection();
         let habit_id = new_habit(&connection, "Stretch");
-        connection.execute(
-            "UPDATE habits SET schedule_type = 'every_n_days', interval_days = 2,
+        connection
+            .execute(
+                "UPDATE habits SET schedule_type = 'every_n_days', interval_days = 2,
                 start_date = '2026-11-01', end_date = '2026-11-10' WHERE id = ?1",
-            [habit_id],
-        ).expect("set every-two-days schedule");
+                [habit_id],
+            )
+            .expect("set every-two-days schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 3)).unwrap()[0].scheduled);
         assert!(!habits_for_date(&connection, date(2026, 11, 4)).unwrap()[0].scheduled);
@@ -601,11 +601,13 @@ mod tests {
     fn weekly_frequency_uses_a_monday_anchored_evaluation_period() {
         let connection = memory_connection();
         let habit_id = new_habit(&connection, "Practice piano");
-        connection.execute(
-            "UPDATE habits SET schedule_type = 'times_per_week', target_per_period = 3,
+        connection
+            .execute(
+                "UPDATE habits SET schedule_type = 'times_per_week', target_per_period = 3,
                 period_unit = 'week', start_date = '2026-11-01' WHERE id = ?1",
-            [habit_id],
-        ).expect("set times-per-week schedule");
+                [habit_id],
+            )
+            .expect("set times-per-week schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 9)).unwrap()[0].scheduled);
         assert!(habits_for_date(&connection, date(2026, 11, 14)).unwrap()[0].scheduled);
@@ -615,21 +617,25 @@ mod tests {
     fn unscheduled_checkins_are_rejected_and_due_checkins_are_saved() {
         let connection = memory_connection();
         let habit_id = new_habit(&connection, "Read");
-        connection.execute(
-            "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
+        connection
+            .execute(
+                "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
                 start_date = '2026-11-01' WHERE id = ?1",
-            [habit_id],
-        ).expect("set Monday-only schedule");
+                [habit_id],
+            )
+            .expect("set Monday-only schedule");
 
         assert!(set_completed_for_date(&connection, habit_id, true, date(2026, 11, 15)).is_err());
         set_completed_for_date(&connection, habit_id, true, date(2026, 11, 16))
             .expect("save Monday check-in");
 
-        let count: i64 = connection.query_row(
-            "SELECT COUNT(*) FROM habit_entries WHERE habit_id = ?1",
-            [habit_id],
-            |row| row.get(0),
-        ).expect("count entries");
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM habit_entries WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("count entries");
         assert_eq!(count, 1);
     }
 
@@ -638,7 +644,10 @@ mod tests {
         let connection = memory_connection();
         let habit_id = new_habit(&connection, "Archive test");
         archive_habit(&connection, habit_id).expect("archive habit");
-        assert!(habits_for_date(&connection, date(2026, 11, 16)).unwrap().is_empty());
+        assert!(
+            habits_for_date(&connection, date(2026, 11, 16))
+                .unwrap()
+                .is_empty()
+        );
     }
-
 }
