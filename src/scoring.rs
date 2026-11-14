@@ -6,7 +6,7 @@ use crate::domain::{
     Cadence, CivilDate, Direction, HabitSchedule, PeriodResult, achievement_ratio, adherence,
     current_streak, update_strength,
 };
-use rusqlite::{Connection, Result, params};
+use rusqlite::{Connection, Result};
 use std::collections::BTreeMap;
 
 pub const SCORING_VERSION: u8 = 1;
@@ -512,6 +512,7 @@ fn entry_ratio(config: &HabitConfig, entry: Entry) -> Result<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::params;
 
     fn date(year: i32, month: u8, day: u8) -> CivilDate {
         CivilDate::new(year, month, day).expect("valid test date")
@@ -528,16 +529,17 @@ mod tests {
         connection
     }
 
-    fn add_habit(
-        connection: &Connection,
-        name: &str,
-        tracking_type: &str,
-        direction: &str,
+    struct HabitSeed<'a> {
+        name: &'a str,
+        tracking_type: &'a str,
+        direction: &'a str,
         target: Option<f64>,
-        schedule: &str,
-        start: &str,
+        schedule: &'a str,
+        start: &'a str,
         target_per_period: Option<i64>,
-    ) -> i64 {
+    }
+
+    fn add_habit(connection: &Connection, habit: HabitSeed<'_>) -> i64 {
         connection
             .execute(
                 "INSERT INTO habits
@@ -545,13 +547,13 @@ mod tests {
                  target_per_period, start_date)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
-                    name,
-                    tracking_type,
-                    direction,
-                    target,
-                    schedule,
-                    target_per_period,
-                    start
+                    habit.name,
+                    habit.tracking_type,
+                    habit.direction,
+                    habit.target,
+                    habit.schedule,
+                    habit.target_per_period,
+                    habit.start
                 ],
             )
             .expect("insert test habit");
@@ -579,13 +581,15 @@ mod tests {
         let connection = test_connection();
         let id = add_habit(
             &connection,
-            "Read",
-            "binary",
-            "at_least",
-            None,
-            "daily",
-            "2026-11-01",
-            None,
+            HabitSeed {
+                name: "Read",
+                tracking_type: "binary",
+                direction: "at_least",
+                target: None,
+                schedule: "daily",
+                start: "2026-11-01",
+                target_per_period: None,
+            },
         );
         add_entry(&connection, id, "2026-11-01", "completed", Some(1.0));
         add_entry(&connection, id, "2026-11-02", "skipped", None);
@@ -612,13 +616,15 @@ mod tests {
         let connection = test_connection();
         let id = add_habit(
             &connection,
-            "Screen time",
-            "limit",
-            "at_most",
-            Some(120.0),
-            "daily",
-            "2026-11-01",
-            None,
+            HabitSeed {
+                name: "Screen time",
+                tracking_type: "limit",
+                direction: "at_most",
+                target: Some(120.0),
+                schedule: "daily",
+                start: "2026-11-01",
+                target_per_period: None,
+            },
         );
         add_entry(&connection, id, "2026-11-01", "completed", Some(90.0));
         add_entry(&connection, id, "2026-11-02", "partial", Some(180.0));
@@ -635,13 +641,15 @@ mod tests {
         let connection = test_connection();
         let id = add_habit(
             &connection,
-            "Exercise",
-            "binary",
-            "at_least",
-            None,
-            "daily",
-            "2026-11-01",
-            None,
+            HabitSeed {
+                name: "Exercise",
+                tracking_type: "binary",
+                direction: "at_least",
+                target: None,
+                schedule: "daily",
+                start: "2026-11-01",
+                target_per_period: None,
+            },
         );
         add_entry(&connection, id, "2026-11-01", "completed", Some(1.0));
         add_entry(&connection, id, "2026-11-02", "skipped", None);
@@ -672,13 +680,15 @@ mod tests {
         let connection = test_connection();
         let id = add_habit(
             &connection,
-            "Workouts",
-            "frequency",
-            "at_least",
-            None,
-            "times_per_week",
-            "2026-11-02",
-            Some(3),
+            HabitSeed {
+                name: "Workouts",
+                tracking_type: "frequency",
+                direction: "at_least",
+                target: None,
+                schedule: "times_per_week",
+                start: "2026-11-02",
+                target_per_period: Some(3),
+            },
         );
         add_entry(&connection, id, "2026-11-02", "completed", Some(1.0));
         add_entry(&connection, id, "2026-11-04", "completed", Some(1.0));
@@ -706,13 +716,15 @@ mod tests {
         let connection = test_connection();
         let id = add_habit(
             &connection,
-            "Training",
-            "frequency",
-            "at_least",
-            None,
-            "times_per_week",
-            "2026-11-02",
-            Some(3),
+            HabitSeed {
+                name: "Training",
+                tracking_type: "frequency",
+                direction: "at_least",
+                target: None,
+                schedule: "times_per_week",
+                start: "2026-11-02",
+                target_per_period: Some(3),
+            },
         );
         add_entry(&connection, id, "2026-11-02", "skipped", None);
 
@@ -732,15 +744,17 @@ mod tests {
     #[test]
     fn weekly_current_period_is_not_missed_before_it_closes() {
         let connection = test_connection();
-        let id = add_habit(
+        add_habit(
             &connection,
-            "Weekly writing",
-            "frequency",
-            "at_least",
-            None,
-            "times_per_week",
-            "2026-11-02",
-            Some(3),
+            HabitSeed {
+                name: "Weekly writing",
+                tracking_type: "frequency",
+                direction: "at_least",
+                target: None,
+                schedule: "times_per_week",
+                start: "2026-11-02",
+                target_per_period: Some(3),
+            },
         );
         let result = summarize_habit(
             &connection,
@@ -759,13 +773,15 @@ mod tests {
         let connection = test_connection();
         add_habit(
             &connection,
-            "New habit",
-            "binary",
-            "at_least",
-            None,
-            "daily",
-            "2026-11-14",
-            None,
+            HabitSeed {
+                name: "New habit",
+                tracking_type: "binary",
+                direction: "at_least",
+                target: None,
+                schedule: "daily",
+                start: "2026-11-14",
+                target_per_period: None,
+            },
         );
         let summaries = summaries_for_date(&connection, date(2026, 11, 14)).unwrap();
         assert_eq!(summaries.len(), 1);
