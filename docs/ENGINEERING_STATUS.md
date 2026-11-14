@@ -54,6 +54,12 @@ Audit date: 2026-11-14
 - Restore never replaces the live app database.
 - Export is a read-transaction snapshot and includes the milestones table when present.
 
+### M8 — GTK data management window (PR #10, validation pending)
+- Adds a main-header entry point for backup creation, read-only verification, restore-to-new-file and CSV export.
+- Reuses the existing local portability service and refuses to replace existing destinations.
+- The restore flow never switches or overwrites the live application database.
+- CI and target-machine file-chooser/manual checks are pending.
+
 ## Validation boundary
 
 Earlier M3 and M5 workflow runs passed all relevant engineering checks on their own branch heads. M6's first dedicated run failed only the formatting gate for one import layout in `src/portability.rs`; that formatting delta has been corrected in the consolidation blob.
