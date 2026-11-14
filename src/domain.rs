@@ -134,7 +134,7 @@ impl HabitSchedule {
             Cadence::EveryNDays { interval: 0 } => {
                 return Err(ScheduleError::InvalidInterval);
             }
-            Cadence::TimesPerWeek { target: 0 } => {
+            Cadence::TimesPerWeek { target } if !(1..=7).contains(&target) => {
                 return Err(ScheduleError::InvalidWeeklyTarget);
             }
             _ => {}
@@ -443,6 +443,15 @@ mod tests {
             .unwrap_err(),
             ScheduleError::InvalidWeeklyTarget
         );
+        assert_eq!(
+            HabitSchedule::new(
+                Cadence::TimesPerWeek { target: 8 },
+                date(2026, 11, 1),
+                None
+            )
+            .unwrap_err(),
+            ScheduleError::InvalidWeeklyTarget
+        );
     }
 
     #[test]
@@ -457,6 +466,10 @@ mod tests {
         );
         assert_eq!(
             achievement_ratio(60.0, 120.0, Direction::AtMost).unwrap(),
+            1.0
+        );
+        assert_eq!(
+            achievement_ratio(0.0, 120.0, Direction::AtMost).unwrap(),
             1.0
         );
     }
