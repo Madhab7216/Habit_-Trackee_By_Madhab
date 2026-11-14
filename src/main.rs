@@ -1,6 +1,7 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod scoring;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
@@ -63,6 +64,14 @@ fn build_ui(application: &Application) {
         goals::open_window(&goals_parent, Rc::clone(&goals_connection));
     });
     header.pack_end(&goals_button);
+
+    let scores_button = Button::with_label("Progress & scores");
+    let scores_parent = window.clone();
+    let scores_connection = Rc::clone(&state.connection);
+    scores_button.connect_clicked(move |_| {
+        show_scores_window(&scores_parent, Rc::clone(&scores_connection));
+    });
+    header.pack_end(&scores_button);
     window.set_titlebar(Some(&header));
 
     let page = gtk::Box::new(Orientation::Vertical, 14);
@@ -180,6 +189,132 @@ fn build_ui(application: &Application) {
 
     refresh_list(&list, &state, &window, false);
     window.present();
+}
+
+
+fn show_scores_window(
+    parent: &ApplicationWindow,
+    connection: Rc<RefCell<rusqlite::Connection>>,
+) {
+    let window = gtk::Window::builder()
+        .title("Habit progress & scores")
+        .transient_for(parent)
+        .default_width(760)
+        .default_height(560)
+        .build();
+
+    let page = gtk::Box::new(Orientation::Vertical, 14);
+    page.set_margin_top(24);
+    page.set_margin_bottom(24);
+    page.set_margin_start(28);
+    page.set_margin_end(28);
+
+    let title = Label::new(Some("Your progress"));
+    title.add_css_class("title-1");
+    title.set_xalign(0.0);
+    let explanation = Label::new(Some(
+        "Scores are replayed from your saved check-ins. Only closed schedule periods count; today's open day or week is not marked as missed.",
+    ));
+    explanation.set_xalign(0.0);
+    explanation.set_wrap(true);
+    explanation.add_css_class("dim-label");
+
+    let list = ListBox::new();
+    list.set_selection_mode(gtk::SelectionMode::None);
+    list.add_css_class("boxed-list");
+    let scroller = ScrolledWindow::new();
+    scroller.set_vexpand(true);
+    scroller.set_child(Some(&list));
+
+    match scoring::summaries_for_today(&connection.borrow()) {
+        Ok(summaries) if summaries.is_empty() => {
+            append_message(&list, "Add a habit to start building a progress history.");
+        }
+        Ok(summaries) => {
+            for summary in summaries {
+                let content = gtk::Box::new(Orientation::Vertical, 8);
+                content.set_margin_top(12);
+                content.set_margin_bottom(12);
+                content.set_margin_start(14);
+                content.set_margin_end(14);
+
+                let name = Label::new(Some(&summary.habit_name));
+                name.set_xalign(0.0);
+                name.add_css_class("heading");
+
+                let metrics = gtk::Box::new(Orientation::Horizontal, 16);
+                let adherence = score_metric(
+                    "Adherence",
+                    format_percentage(summary.adherence),
+                );
+                let strength = score_metric(
+                    "Habit strength",
+                    format_percentage(summary.habit_strength),
+                );
+                let streak = score_metric(
+                    "Current streak",
+                    format!("{} periods", summary.current_streak),
+                );
+                metrics.append(&adherence);
+                metrics.append(&strength);
+                metrics.append(&streak);
+
+                let details = Label::new(Some(&format!(
+                    "Version {} · {} closed periods · {} missed · {} skipped · {} paused",
+                    summary.scoring_version,
+                    summary.closed_periods,
+                    summary.missed_periods,
+                    summary.skipped_periods,
+                    summary.paused_periods
+                )));
+                details.set_xalign(0.0);
+                details.add_css_class("dim-label");
+
+                content.append(&name);
+                content.append(&metrics);
+                content.append(&details);
+                let row = ListBoxRow::new();
+                row.set_child(Some(&content));
+                list.append(&row);
+            }
+        }
+        Err(error) => {
+            append_message(&list, &format!("Could not calculate scores: {error}"));
+        }
+    }
+
+    let policy = Label::new(Some(
+        "Adherence = average achievement across scored periods. Habit strength = EMA (α = 0.25). Streak = consecutive successful periods. Skips and fully paused periods are excluded; missed periods score zero.",
+    ));
+    policy.set_xalign(0.0);
+    policy.set_wrap(true);
+    policy.add_css_class("dim-label");
+
+    page.append(&title);
+    page.append(&explanation);
+    page.append(&scroller);
+    page.append(&policy);
+    window.set_child(Some(&page));
+    window.present();
+}
+
+fn score_metric(label: &str, value: String) -> gtk::Box {
+    let metric = gtk::Box::new(Orientation::Vertical, 2);
+    let heading = Label::new(Some(label));
+    heading.set_xalign(0.0);
+    heading.add_css_class("dim-label");
+    let result = Label::new(Some(&value));
+    result.set_xalign(0.0);
+    result.add_css_class("title-3");
+    metric.append(&heading);
+    metric.append(&result);
+    metric
+}
+
+fn format_percentage(value: Option<f64>) -> String {
+    value
+        .map(|ratio| format!("{:.0}%", ratio * 100.0))
+        .unwrap_or_else(|| "No history".to_string())
 }
 
 fn refresh_list(
