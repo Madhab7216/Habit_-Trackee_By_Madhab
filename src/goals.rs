@@ -61,7 +61,10 @@ fn is_leap_year(year: i32) -> bool {
 }
 
 fn valid_iso_date(value: &str) -> bool {
-    if value.len() != 10 || value.as_bytes().get(4) != Some(&b'-') || value.as_bytes().get(7) != Some(&b'-') {
+    if value.len() != 10
+        || value.as_bytes().get(4) != Some(&b'-')
+        || value.as_bytes().get(7) != Some(&b'-')
+    {
         return false;
     }
     let Some(year) = value.get(0..4).and_then(|part| part.parse::<i32>().ok()) else {
@@ -115,10 +118,7 @@ pub fn ensure_schema(connection: &Connection) -> Result<()> {
     if version < 1 {
         let transaction = connection.unchecked_transaction()?;
         transaction.execute_batch(MILESTONE_MIGRATION)?;
-        transaction.execute(
-            "INSERT INTO goal_schema_migrations(version) VALUES (1)",
-            [],
-        )?;
+        transaction.execute("INSERT INTO goal_schema_migrations(version) VALUES (1)", [])?;
         transaction.commit()?;
     }
     Ok(())
@@ -275,7 +275,11 @@ pub fn list_milestones(connection: &Connection, goal_id: i64) -> Result<Vec<Mile
     rows.collect()
 }
 
-pub fn set_milestone_status(connection: &Connection, milestone_id: i64, status: &str) -> Result<()> {
+pub fn set_milestone_status(
+    connection: &Connection,
+    milestone_id: i64,
+    status: &str,
+) -> Result<()> {
     if !matches!(status, "pending" | "completed" | "skipped") {
         return Err(rusqlite::Error::InvalidParameterName(
             "unsupported milestone status".to_string(),
@@ -431,8 +435,17 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     archived_button.connect_clicked(move |_| {
         let show_archived = !toggle_mode.get();
         toggle_mode.set(show_archived);
-        toggle_button.set_label(if show_archived { "Back to goals" } else { "Show archived" });
-        refresh_goal_list(&toggle_list, &toggle_window, &toggle_connection, show_archived);
+        toggle_button.set_label(if show_archived {
+            "Back to goals"
+        } else {
+            "Show archived"
+        });
+        refresh_goal_list(
+            &toggle_list,
+            &toggle_window,
+            &toggle_connection,
+            show_archived,
+        );
     });
 
     refresh_goal_list(&list, &window, &connection, false);
@@ -460,7 +473,11 @@ fn refresh_goal_list(
     if goals.is_empty() {
         append_list_message(
             list,
-            if archived_view { "No archived goals." } else { "No goals yet. Add your first goal above." },
+            if archived_view {
+                "No archived goals."
+            } else {
+                "No goals yet. Add your first goal above."
+            },
         );
         return;
     }
@@ -478,8 +495,11 @@ fn refresh_goal_list(
         title.set_xalign(0.0);
         title.set_hexpand(true);
         let target = gtk::Label::new(Some(
-            goal.target_date.as_deref().map(|date| format!("Target {date}"))
-                .unwrap_or_else(|| "No target date".to_string()).as_str(),
+            goal.target_date
+                .as_deref()
+                .map(|date| format!("Target {date}"))
+                .unwrap_or_else(|| "No target date".to_string())
+                .as_str(),
         ));
         target.add_css_class("dim-label");
         heading.append(&title);
@@ -539,7 +559,9 @@ fn refresh_goal_list(
             let restore_connection = Rc::clone(connection);
             let restore_id = goal.id;
             restore_button.connect_clicked(move |_| {
-                if let Err(error) = set_goal_status(&restore_connection.borrow(), restore_id, "active") {
+                if let Err(error) =
+                    set_goal_status(&restore_connection.borrow(), restore_id, "active")
+                {
                     eprintln!("Could not restore goal: {error}");
                 }
                 refresh_goal_list(&restore_list, &restore_parent, &restore_connection, true);
@@ -562,7 +584,9 @@ fn refresh_goal_list(
             let state_connection = Rc::clone(connection);
             let state_id = goal.id;
             state_action.connect_clicked(move |_| {
-                if let Err(error) = set_goal_status(&state_connection.borrow(), state_id, new_status) {
+                if let Err(error) =
+                    set_goal_status(&state_connection.borrow(), state_id, new_status)
+                {
                     eprintln!("Could not update goal: {error}");
                 }
                 refresh_goal_list(&state_list, &state_parent, &state_connection, false);
@@ -576,10 +600,17 @@ fn refresh_goal_list(
             let complete_connection = Rc::clone(connection);
             let complete_id = goal.id;
             complete_button.connect_clicked(move |_| {
-                if let Err(error) = set_goal_status(&complete_connection.borrow(), complete_id, "completed") {
+                if let Err(error) =
+                    set_goal_status(&complete_connection.borrow(), complete_id, "completed")
+                {
                     eprintln!("Could not complete goal: {error}");
                 }
-                refresh_goal_list(&complete_list, &complete_parent, &complete_connection, false);
+                refresh_goal_list(
+                    &complete_list,
+                    &complete_parent,
+                    &complete_connection,
+                    false,
+                );
             });
             actions.append(&complete_button);
 
@@ -589,7 +620,9 @@ fn refresh_goal_list(
             let archive_connection = Rc::clone(connection);
             let archive_id = goal.id;
             archive_button.connect_clicked(move |_| {
-                if let Err(error) = set_goal_status(&archive_connection.borrow(), archive_id, "archived") {
+                if let Err(error) =
+                    set_goal_status(&archive_connection.borrow(), archive_id, "archived")
+                {
                     eprintln!("Could not archive goal: {error}");
                 }
                 refresh_goal_list(&archive_list, &archive_parent, &archive_connection, false);
@@ -819,10 +852,17 @@ fn refresh_milestone_list(
         let milestone_parent = parent.clone();
         let milestone_id = milestone.id;
         complete.connect_clicked(move |_| {
-            if let Err(error) = set_milestone_status(&milestone_connection.borrow(), milestone_id, next_status) {
+            if let Err(error) =
+                set_milestone_status(&milestone_connection.borrow(), milestone_id, next_status)
+            {
                 eprintln!("Could not update milestone: {error}");
             }
-            refresh_milestone_list(&milestone_list, &milestone_parent, &milestone_connection, goal_id);
+            refresh_milestone_list(
+                &milestone_list,
+                &milestone_parent,
+                &milestone_connection,
+                goal_id,
+            );
         });
 
         let skip = gtk::Button::with_label(if milestone.status == "skipped" { "Reopen" } else { "Skip" });
@@ -830,9 +870,15 @@ fn refresh_milestone_list(
         let skip_list = list.clone();
         let skip_parent = parent.clone();
         let skip_id = milestone.id;
-        let skip_status = if milestone.status == "skipped" { "pending" } else { "skipped" };
+        let skip_status = if milestone.status == "skipped" {
+            "pending"
+        } else {
+            "skipped"
+        };
         skip.connect_clicked(move |_| {
-            if let Err(error) = set_milestone_status(&skip_connection.borrow(), skip_id, skip_status) {
+            if let Err(error) =
+                set_milestone_status(&skip_connection.borrow(), skip_id, skip_status)
+            {
                 eprintln!("Could not skip milestone: {error}");
             }
             refresh_milestone_list(&skip_list, &skip_parent, &skip_connection, goal_id);
@@ -868,14 +914,21 @@ mod tests {
 
     fn test_connection() -> Connection {
         let connection = Connection::open_in_memory().expect("open in-memory database");
-        connection.execute_batch(BASE_MIGRATION).expect("create base schema");
+        connection
+            .execute_batch(BASE_MIGRATION)
+            .expect("create base schema");
         ensure_schema(&connection).expect("create milestone schema");
         connection
     }
 
     fn goal(connection: &Connection) -> i64 {
-        create_goal(connection, "Learn Rust", "Build a small project", Some("2027-03-31"))
-            .expect("create goal")
+        create_goal(
+            connection,
+            "Learn Rust",
+            "Build a small project",
+            Some("2027-03-31"),
+        )
+        .expect("create goal")
     }
 
     #[test]
@@ -920,10 +973,16 @@ mod tests {
         let goal_id = goal(&connection);
         let milestone_id = create_milestone(&connection, goal_id, "First draft", "", None).unwrap();
         set_milestone_status(&connection, milestone_id, "completed").unwrap();
-        assert_eq!(list_goals(&connection, false).unwrap()[0].progress_percent, 100);
+        assert_eq!(
+            list_goals(&connection, false).unwrap()[0].progress_percent,
+            100
+        );
 
         set_milestone_status(&connection, milestone_id, "pending").unwrap();
-        assert_eq!(list_goals(&connection, false).unwrap()[0].progress_percent, 0);
+        assert_eq!(
+            list_goals(&connection, false).unwrap()[0].progress_percent,
+            0
+        );
 
         set_goal_status(&connection, goal_id, "archived").unwrap();
         assert!(list_goals(&connection, false).unwrap().is_empty());
@@ -946,15 +1005,16 @@ mod tests {
     fn goal_can_link_and_unlink_only_active_habits() {
         let connection = test_connection();
         let goal_id = goal(&connection);
-        connection.execute(
-            "INSERT INTO habits(name) VALUES ('Read 20 pages')",
-            [],
-        ).unwrap();
-        let habit_id: i64 = connection.query_row(
-            "SELECT id FROM habits WHERE name = 'Read 20 pages'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        connection
+            .execute("INSERT INTO habits(name) VALUES ('Read 20 pages')", [])
+            .unwrap();
+        let habit_id: i64 = connection
+            .query_row(
+                "SELECT id FROM habits WHERE name = 'Read 20 pages'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
 
         link_habit_to_goal(&connection, goal_id, habit_id).unwrap();
         link_habit_to_goal(&connection, goal_id, habit_id).unwrap();
@@ -968,11 +1028,13 @@ mod tests {
         let connection = test_connection();
         ensure_schema(&connection).unwrap();
         ensure_schema(&connection).unwrap();
-        let version: i64 = connection.query_row(
-            "SELECT MAX(version) FROM goal_schema_migrations",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let version: i64 = connection
+            .query_row(
+                "SELECT MAX(version) FROM goal_schema_migrations",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(version, 1);
     }
 }
