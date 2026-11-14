@@ -53,15 +53,15 @@ fn locale_directory() -> PathBuf {
     if development.is_dir() {
         return development;
     }
-    if let Ok(executable) = env::current_exe() {
-        if let Some(directory) = executable.parent() {
-            for candidate in [
-                directory.join("../share/locale"),
-                directory.join("../../share/locale"),
-            ] {
-                if candidate.is_dir() {
-                    return candidate;
-                }
+    if let Ok(executable) = env::current_exe()
+        && let Some(directory) = executable.parent()
+    {
+        for candidate in [
+            directory.join("../share/locale"),
+            directory.join("../../share/locale"),
+        ] {
+            if candidate.is_dir() {
+                return candidate;
             }
         }
     }
