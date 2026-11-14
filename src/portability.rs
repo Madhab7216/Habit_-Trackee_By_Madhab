@@ -3,12 +3,7 @@
 //! All output paths are explicit. Existing files/directories are never overwritten.
 //! Backup files and CSV bundles are created with owner-only permissions on Unix.
 
-use rusqlite::{
-    backup::Backup,
-    types::ValueRef,
-    Connection,
-    OpenFlags,
-};
+use rusqlite::{Connection, OpenFlags, backup::Backup, types::ValueRef};
 use std::{
     error::Error,
     fs::{self, DirBuilder, File, OpenOptions},
@@ -34,7 +29,9 @@ const EXPORT_TABLES: &[&str] = &[
 ];
 
 fn ensure_parent_directory(destination: &Path) -> io::Result<()> {
-    let parent = destination.parent().filter(|path| !path.as_os_str().is_empty());
+    let parent = destination
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty());
     if let Some(parent) = parent {
         fs::create_dir_all(parent)?;
     }
@@ -102,8 +99,7 @@ fn schema_version(connection: &Connection) -> PortabilityResult<i64> {
 
 /// Verify database integrity, foreign-key consistency and the expected app schema.
 pub fn verify_database(connection: &Connection) -> PortabilityResult<i64> {
-    let integrity: String =
-        connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    let integrity: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
     if integrity != "ok" {
         return Err(invalid_data(format!("SQLite integrity_check failed: {integrity}")).into());
     }
@@ -149,10 +145,9 @@ pub fn verify_database(connection: &Connection) -> PortabilityResult<i64> {
             |row| row.get(0),
         )?;
         if !has_pause_history {
-            return Err(invalid_data(
-                "schema version 2 database is missing habit_pause_periods",
-            )
-            .into());
+            return Err(
+                invalid_data("schema version 2 database is missing habit_pause_periods").into(),
+            );
         }
     }
 
@@ -169,10 +164,7 @@ pub fn verify_backup_file(path: &Path) -> PortabilityResult<i64> {
 ///
 /// The destination must not already exist. The file is reserved with create_new before
 /// SQLite opens it, so an existing backup or unrelated file is never overwritten.
-pub fn create_verified_backup(
-    source: &Connection,
-    destination: &Path,
-) -> PortabilityResult<()> {
+pub fn create_verified_backup(source: &Connection, destination: &Path) -> PortabilityResult<()> {
     ensure_parent_directory(destination)?;
     let reservation = create_private_file(destination)?;
     drop(reservation);
@@ -204,10 +196,7 @@ pub fn create_verified_backup(
 ///
 /// This never replaces the active database or an existing file. The caller can inspect
 /// the restored file and explicitly choose when to switch the application to it.
-pub fn restore_backup_to_new_file(
-    backup_path: &Path,
-    destination: &Path,
-) -> PortabilityResult<()> {
+pub fn restore_backup_to_new_file(backup_path: &Path, destination: &Path) -> PortabilityResult<()> {
     let source_version = verify_backup_file(backup_path)?;
     ensure_parent_directory(destination)?;
     let reservation = create_private_file(destination)?;
@@ -248,10 +237,7 @@ pub fn restore_backup_to_new_file(
 ///
 /// A read transaction gives every CSV file the same logical database snapshot.
 /// Null values become empty fields; BLOB values are written as lowercase hex.
-pub fn export_csv_bundle(
-    source: &mut Connection,
-    destination: &Path,
-) -> PortabilityResult<()> {
+pub fn export_csv_bundle(source: &mut Connection, destination: &Path) -> PortabilityResult<()> {
     ensure_parent_directory(destination)?;
     create_private_directory(destination)?;
 
@@ -291,11 +277,7 @@ fn table_exists(connection: &Connection, table: &str) -> rusqlite::Result<bool> 
     )
 }
 
-fn export_table(
-    connection: &Connection,
-    table: &str,
-    destination: &Path,
-) -> PortabilityResult<()> {
+fn export_table(connection: &Connection, table: &str, destination: &Path) -> PortabilityResult<()> {
     // Table names come only from EXPORT_TABLES above, never from user input.
     let sql = format!("SELECT * FROM \"{table}\" ORDER BY 1");
     let mut statement = connection.prepare(&sql)?;
@@ -423,7 +405,10 @@ mod tests {
             .execute(
                 "INSERT INTO habits(name, description, category_id)
                  VALUES (?1, ?2, 1)",
-                ["Drink \"water\", slowly\nand consistently", "Line one\nLine two"],
+                [
+                    "Drink \"water\", slowly\nand consistently",
+                    "Line one\nLine two",
+                ],
             )
             .expect("insert habit");
         connection
@@ -441,10 +426,7 @@ mod tests {
             )
             .expect("insert pause history");
         connection
-            .execute(
-                "INSERT INTO habit_tags(name) VALUES ('Morning')",
-                [],
-            )
+            .execute("INSERT INTO habit_tags(name) VALUES ('Morning')", [])
             .expect("insert tag");
         connection
             .execute(
@@ -459,7 +441,10 @@ mod tests {
             )
             .expect("insert goal");
         connection
-            .execute("INSERT INTO goal_habits(goal_id, habit_id) VALUES (1, 1)", [])
+            .execute(
+                "INSERT INTO goal_habits(goal_id, habit_id) VALUES (1, 1)",
+                [],
+            )
             .expect("link goal");
         connection
             .execute(
@@ -491,7 +476,9 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM habit_entries", [], |row| row.get(0))
             .expect("count restored entries");
         let pause_count: i64 = restored
-            .query_row("SELECT COUNT(*) FROM habit_pause_periods", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM habit_pause_periods", [], |row| {
+                row.get(0)
+            })
             .expect("count restored pause periods");
         let goal_count: i64 = restored
             .query_row("SELECT COUNT(*) FROM goals", [], |row| row.get(0))
@@ -553,12 +540,10 @@ mod tests {
 
         export_csv_bundle(&mut source, &destination).expect("export CSV bundle");
 
-        let entries = fs::read_to_string(destination.join("habit_entries.csv"))
-            .expect("read entries CSV");
-        let habits =
-            fs::read_to_string(destination.join("habits.csv")).expect("read habits CSV");
-        let manifest =
-            fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
+        let entries =
+            fs::read_to_string(destination.join("habit_entries.csv")).expect("read entries CSV");
+        let habits = fs::read_to_string(destination.join("habits.csv")).expect("read habits CSV");
+        let manifest = fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
 
         assert!(entries.contains("habit_id,local_date,status,value,note"));
         assert!(habits.contains("\"Drink \"\"water\"\", slowly\nand consistently\""));
