@@ -191,11 +191,7 @@ fn build_ui(application: &Application) {
     window.present();
 }
 
-
-fn show_scores_window(
-    parent: &ApplicationWindow,
-    connection: Rc<RefCell<rusqlite::Connection>>,
-) {
+fn show_scores_window(parent: &ApplicationWindow, connection: Rc<RefCell<rusqlite::Connection>>) {
     let window = gtk::Window::builder()
         .title("Habit progress & scores")
         .transient_for(parent)
@@ -243,14 +239,9 @@ fn show_scores_window(
                 name.add_css_class("heading");
 
                 let metrics = gtk::Box::new(Orientation::Horizontal, 16);
-                let adherence = score_metric(
-                    "Adherence",
-                    format_percentage(summary.adherence),
-                );
-                let strength = score_metric(
-                    "Habit strength",
-                    format_percentage(summary.habit_strength),
-                );
+                let adherence = score_metric("Adherence", format_percentage(summary.adherence));
+                let strength =
+                    score_metric("Habit strength", format_percentage(summary.habit_strength));
                 let streak = score_metric(
                     "Current streak",
                     format!("{} periods", summary.current_streak),
