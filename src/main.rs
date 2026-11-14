@@ -1,6 +1,7 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod insights;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
@@ -63,6 +64,14 @@ fn build_ui(application: &Application) {
         goals::open_window(&goals_parent, Rc::clone(&goals_connection));
     });
     header.pack_end(&goals_button);
+
+    let insights_button = Button::with_label("Progress calendar");
+    let insights_parent = window.clone();
+    let insights_connection = Rc::clone(&state.connection);
+    insights_button.connect_clicked(move |_| {
+        insights::open_window(&insights_parent, Rc::clone(&insights_connection));
+    });
+    header.pack_end(&insights_button);
     window.set_titlebar(Some(&header));
 
     let page = gtk::Box::new(Orientation::Vertical, 14);
