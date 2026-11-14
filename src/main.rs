@@ -85,7 +85,7 @@ fn build_ui(application: &Application) {
     scroller.set_child(Some(&list));
 
     let footer = Label::new(Some(
-        "M2 starter · Offline tracking · Your data stays on this device",
+        "M3 foundation · Offline tracking · Your data stays on this device",
     ));
     footer.add_css_class("dim-label");
     footer.set_xalign(0.0);
@@ -144,16 +144,21 @@ fn refresh_list(list: &ListBox, state: &Rc<AppState>) {
         let name = Label::new(Some(&habit.name));
         name.set_xalign(0.0);
         name.set_hexpand(true);
-        if habit.completed {
+        if habit.completed || habit.paused {
             name.add_css_class("dim-label");
         }
-        let status = Label::new(Some(if habit.completed {
+
+        let status = Label::new(Some(if habit.paused {
+            "Paused"
+        } else if habit.completed {
             "Completed"
         } else {
             "Due today"
         }));
         status.add_css_class("dim-label");
+
         let action = Button::with_label(if habit.completed { "Undo" } else { "Mark done" });
+        action.set_sensitive(!habit.paused);
 
         let action_state = Rc::clone(state);
         let action_list = list.clone();
@@ -168,9 +173,24 @@ fn refresh_list(list: &ListBox, state: &Rc<AppState>) {
             refresh_list(&action_list, &action_state);
         });
 
+        let pause_action = Button::with_label(if habit.paused { "Resume" } else { "Pause" });
+        let pause_state = Rc::clone(state);
+        let pause_list = list.clone();
+        let pause_habit_id = habit.id;
+        let paused = habit.paused;
+        pause_action.connect_clicked(move |_| {
+            if let Err(error) =
+                db::set_paused(&pause_state.connection.borrow(), pause_habit_id, !paused)
+            {
+                eprintln!("Could not change pause state: {error}");
+            }
+            refresh_list(&pause_list, &pause_state);
+        });
+
         row_content.append(&name);
         row_content.append(&status);
         row_content.append(&action);
+        row_content.append(&pause_action);
         let row = ListBoxRow::new();
         row.set_child(Some(&row_content));
         list.append(&row);
