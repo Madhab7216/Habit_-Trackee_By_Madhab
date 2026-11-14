@@ -3,13 +3,7 @@ pub mod db;
 #[path = "../portability.rs"]
 pub mod portability;
 
-use std::{
-    env,
-    error::Error,
-    io,
-    path::Path,
-    process::ExitCode,
-};
+use std::{env, error::Error, io, path::Path, process::ExitCode};
 
 fn main() -> ExitCode {
     match run() {
@@ -36,10 +30,7 @@ fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
             println!("Verified database backup created: {destination}");
         }
         [_, command, backup, destination] if command == "restore" => {
-            portability::restore_backup_to_new_file(
-                Path::new(backup),
-                Path::new(destination),
-            )?;
+            portability::restore_backup_to_new_file(Path::new(backup), Path::new(destination))?;
             println!("Backup verified and restored to a new database: {destination}");
             println!("The active application database was not changed.");
         }
