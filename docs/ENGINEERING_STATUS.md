@@ -9,7 +9,7 @@ Audit date: 2026-11-14
 - Primary implementation branch: `work/linux-mint-habit-tracker-foundation`
 - Primary pull request: [#1 — M0–M3 foundation: GTK4 habit tracker, scheduling, scoring and pause/resume](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1), open and draft.
 - The M3 schedule integration, M5 Goals & Milestones and M6 local portability increments are present on the current foundation feature branch.
-- Separate M4 persisted scoring work is proposed on `work/m4-persisted-scoring`; it is stacked on the foundation and does not edit the M5 goals or M6 portability modules.
+- Separate M4 persisted scoring work is proposed on `work/m4-persisted-scoring` with [Draft PR #12](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/12); it is stacked on the foundation and does not edit the M5 goals or M6 portability modules.
 - Target-machine validation issue: [#2 — validate on the target Linux Mint workstation](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/2).
 
 ## Implemented in the current feature increment
@@ -39,7 +39,7 @@ Audit date: 2026-11-14
 - Closed missed periods contribute zero; daily skips and fully paused periods are excluded; current open day/week is not counted as missed.
 - Weekly frequency sessions aggregate toward the quota and partial-week pauses prorate the target.
 - Replay rebuilds from source records on demand; no stale score cache, network request or telemetry is added.
-- Implementation and test boundaries: [M4 persisted scoring](M4_PERSISTED_SCORING.md); behavior contract: [SCORING_POLICY.md](SCORING_POLICY.md).
+- Implementation and test boundaries: [M4 persisted scoring](M4_PERSISTED_SCORING.md); behavior contract: [SCORING_POLICY.md](SCORING_POLICY.md). Draft PR #12 still requires exact-head CI and target-machine GUI validation.
 
 ### M5 — Goals & Milestones
 - Additive goal-milestone table migration; existing goals and habit links remain.
