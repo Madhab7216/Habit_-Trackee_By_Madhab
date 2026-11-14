@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS goal_milestones (
     due_date TEXT CHECK (
         due_date IS NULL OR (
             length(due_date) = 10
+            AND strftime('%Y-%m-%d', due_date) IS NOT NULL
             AND strftime('%Y-%m-%d', due_date) = due_date
         )
     ),
