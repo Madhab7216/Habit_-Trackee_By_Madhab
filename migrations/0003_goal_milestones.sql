@@ -7,8 +7,7 @@ CREATE TABLE IF NOT EXISTS goal_milestones (
     due_date TEXT CHECK (
         due_date IS NULL OR (
             length(due_date) = 10
-            AND substr(due_date, 5, 1) = '-'
-            AND substr(due_date, 8, 1) = '-'
+            AND strftime('%Y-%m-%d', due_date) = due_date
         )
     ),
     status TEXT NOT NULL DEFAULT 'pending'
