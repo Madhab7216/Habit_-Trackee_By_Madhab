@@ -8,10 +8,19 @@ Audit date: 2026-11-14
 - Default branch: `main`; kept unchanged.
 - Primary implementation branch: `work/linux-mint-habit-tracker-foundation`
 - Primary pull request: [#1 — M0–M3 foundation: GTK4 habit tracker, scheduling, scoring and pause/resume](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1), open and draft.
-- Stacked work branches/PRs for M3, M5 and M6 have their own history; their implementation is being consolidated into PR #1. No side branch has been deleted or force-pushed.
+- Stacked work branches/PRs for M3 and M5 retain their own history; their implementation is being consolidated into PR #1. No active M3/M5 branch has been force-pushed.
+- Duplicate M6 draft PR #6 was closed as superseded after the consolidated foundation gained the newer portability implementation (including milestone export).
+- M7 desktop launch smoke test is isolated in draft PR #9.
 - Target-machine validation issue: [#2 — validate on the target Linux Mint workstation](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/2).
 
 ## Implemented in the current feature increment
+
+### M7 — virtual desktop launch smoke test (PR #9)
+- Builds the GTK application and launches it in an Xvfb virtual display.
+- Verifies the expected main window appears.
+- Uses a temporary XDG data directory and confirms the application creates a valid SQLite database there.
+- Deletes temporary test data after completion; no personal user records are accessed or uploaded.
+
 
 ### M2 — native foundation
 - Rust + GTK 4 application and local SQLite repository.
@@ -56,9 +65,13 @@ Audit date: 2026-11-14
 
 ## Validation boundary
 
-Earlier M3 and M5 workflow runs passed all relevant engineering checks on their own branch heads. M6's first dedicated run failed only the formatting gate for one import layout in `src/portability.rs`; that formatting delta has been corrected in the consolidation blob.
+Validation results observed on 14 November 2026:
 
-A new CI run must complete on the exact latest PR #1 head before the combined increment is described as CI-green. The actual GTK application still needs to be launched and exercised on the target Linux Mint workstation (Issue #2).
+- Foundation head `d8e17b60c39908451088f375ba3a553e057c7faf`: Engineering Checks run 43597541792 passed; Data Portability checks run 43597541806 passed.
+- M7 head `4c32302b91ad31f8f9f232f47d0ce41616ca9c58`: Linux desktop smoke run 43616211122 passed, including binary build, Xvfb window detection and isolated SQLite integrity check.
+- The earlier standalone M6 PR run failed its formatting gate; the consolidated Foundation version is formatted and passed its latest checks.
+
+These results are specific to the listed commit SHAs. Repeat CI on any newer PR #1 head before release. The actual GTK application still needs to be launched and exercised on the target Linux Mint workstation (Issue #2); a virtual-display CI run is not a substitute.
 
 ## Remaining v1.0 blockers
 

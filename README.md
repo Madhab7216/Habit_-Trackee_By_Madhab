@@ -91,6 +91,7 @@ If neither path is an absolute usable location, the app refuses to place persona
 - [Goals and milestones](docs/M5_GOALS_MILESTONES.md)
 - [Scoring policy](docs/SCORING_POLICY.md)
 - [Data portability](docs/DATA_PORTABILITY.md)
+- [Linux desktop smoke test](docs/DESKTOP_SMOKE_TEST.md)
 
 ## Release blockers
 
