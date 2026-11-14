@@ -1,8 +1,8 @@
+pub mod data_ui;
 pub mod db;
 pub mod domain;
 pub mod goals;
 pub mod portability;
-pub mod data_ui;
 
 use crate::{data_ui, domain::Cadence};
 use gtk::prelude::*;
@@ -67,9 +67,7 @@ fn build_ui(application: &Application) {
     header.pack_end(&goals_button);
 
     let data_button = Button::with_label("Data & backups");
-    data_button.set_tooltip_text(Some(
-        "Create, verify, restore and export local app data",
-    ));
+    data_button.set_tooltip_text(Some("Create, verify, restore and export local app data"));
     let data_parent = window.clone();
     let data_connection = Rc::clone(&state.connection);
     data_button.connect_clicked(move |_| {
