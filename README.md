@@ -8,7 +8,7 @@ A privacy-first, offline-first native habit and personal productivity app for Li
 
 - **First platform:** Linux Mint desktop.
 - **Interface:** native GTK 4; focused Today view plus deeper management and goals.
-- **Languages:** Bengali and English are planned; complete localization remains outstanding.
+- **Languages:** Bengali and English are available in the Today, habit lifecycle, Goals and Milestones screens. The preference is stored locally and applied after restart; additional screens are localized as their separate workstreams are integrated.
 - **Storage:** local-first SQLite, versioned migrations and user-controlled data.
 - **Scoring:** transparent adherence, habit-strength estimate and current streak, displayed separately.
 - **Privacy:** no background upload or telemetry.
@@ -91,12 +91,13 @@ If neither path is an absolute usable location, the app refuses to place persona
 - [Goals and milestones](docs/M5_GOALS_MILESTONES.md)
 - [Scoring policy](docs/SCORING_POLICY.md)
 - [Data portability](docs/DATA_PORTABILITY.md)
+- [Bengali and English localization](docs/LOCALIZATION.md)
 
 ## Release blockers
 
 - Fresh GitHub Actions run must pass on the latest pull-request head.
 - Launch and exercise the app on the actual supported Linux Mint workstation; CI compile is not a substitute.
-- Complete Bengali/English localization, keyboard/screen-reader accessibility, timezone/DST behavior and packaging.
+- Extend Bengali/English localization to additional screens and companion tools delivered by separate workstreams; complete keyboard/screen-reader review, timezone/DST behavior and packaging.
 - Add effective-dated schedule history or explicit confirmation before schedule edits change historical scoring.
 - Choose and add an explicit open-source license before accepting external contributions.
 

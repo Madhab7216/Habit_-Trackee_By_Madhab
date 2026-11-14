@@ -1,0 +1,257 @@
+msgid ""
+msgstr "Project-Id-Version: Habit Trackers by Madhab 0.1.0\nLanguage: bn\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\nPlural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "The local database could not be opened. See the terminal for details."
+msgstr "স্থানীয় ডেটাবেস খোলা যায়নি। বিস্তারিত জানতে টার্মিনাল দেখুন।"
+
+msgid "Madhab Habit Tracker"
+msgstr "মাধব অভ্যাস ট্র্যাকার"
+
+msgid "Language"
+msgstr "ভাষা"
+
+msgid "Language saved. Restart the app to apply."
+msgstr "ভাষার পছন্দ সংরক্ষিত হয়েছে। কার্যকর করতে অ্যাপটি আবার চালু করুন।"
+
+msgid "Could not save language preference: {0}"
+msgstr "ভাষার পছন্দ সংরক্ষণ করা যায়নি: {0}"
+
+msgid "Today"
+msgstr "আজ"
+
+msgid "Small actions, steady progress. Your data stays on this device."
+msgstr "ছোট ছোট কাজ, ধারাবাহিক অগ্রগতি। আপনার তথ্য এই ডিভাইসেই থাকে।"
+
+msgid "Add a habit…"
+msgstr "একটি অভ্যাস যোগ করুন…"
+
+msgid "Every day"
+msgstr "প্রতিদিন"
+
+msgid "Monday to Friday"
+msgstr "সোমবার–শুক্রবার"
+
+msgid "Every 2 days"
+msgstr "প্রতি ২ দিন অন্তর"
+
+msgid "Times per week"
+msgstr "সপ্তাহে কয়বার"
+
+msgid "Weekly session target (1–7), used for Times per week"
+msgstr "সাপ্তাহিক লক্ষ্য (১–৭); সপ্তাহে কয়বার বিকল্পের জন্য"
+
+msgid "Add habit"
+msgstr "অভ্যাস যোগ করুন"
+
+msgid "View archived"
+msgstr "আর্কাইভ করা অভ্যাস দেখুন"
+
+msgid "Back to today"
+msgstr "আজকের পাতায় ফিরুন"
+
+msgid "M3 · Reversible habit management · Offline tracking · Your data stays on this device"
+msgstr "M3 · অভ্যাস পরিচালনা ও পুনরুদ্ধার · অফলাইন ট্র্যাকিং · আপনার তথ্য এই ডিভাইসেই থাকে"
+
+msgid "Could not load habits: {0}"
+msgstr "অভ্যাস লোড করা যায়নি: {0}"
+
+msgid "No archived habits."
+msgstr "আর্কাইভে কোনো অভ্যাস নেই।"
+
+msgid "No habits yet. Add one above to begin."
+msgstr "এখনও কোনো অভ্যাস নেই। শুরু করতে উপরে একটি যোগ করুন।"
+
+msgid "Archived"
+msgstr "আর্কাইভ করা"
+
+msgid "Restore"
+msgstr "পুনরুদ্ধার করুন"
+
+msgid "Paused"
+msgstr "বিরতিতে"
+
+msgid "Completed"
+msgstr "সম্পন্ন"
+
+msgid "Not scheduled"
+msgstr "আজ নির্ধারিত নয়"
+
+msgid "Due today"
+msgstr "আজ করণীয়"
+
+msgid "Edit"
+msgstr "সম্পাদনা"
+
+msgid "Undo"
+msgstr "পূর্বাবস্থায় ফেরান"
+
+msgid "Mark done"
+msgstr "সম্পন্ন করুন"
+
+msgid "Resume"
+msgstr "আবার শুরু করুন"
+
+msgid "Pause"
+msgstr "বিরতি দিন"
+
+msgid "Archive"
+msgstr "আর্কাইভ করুন"
+
+msgid "Edit habit"
+msgstr "অভ্যাস সম্পাদনা"
+
+msgid "Habit name"
+msgstr "অভ্যাসের নাম"
+
+msgid "Cancel"
+msgstr "বাতিল"
+
+msgid "Save"
+msgstr "সংরক্ষণ"
+
+msgid "Could not save habit: {0}"
+msgstr "অভ্যাস সংরক্ষণ করা যায়নি: {0}"
+
+msgid "Goals & milestones"
+msgstr "লক্ষ্য ও মাইলস্টোন"
+
+msgid "Turn long-term goals into clear, measurable milestones. Progress is based on completed milestones."
+msgstr "দীর্ঘমেয়াদি লক্ষ্যকে স্পষ্ট ও পরিমাপযোগ্য ধাপে ভাগ করুন। সম্পন্ন মাইলস্টোনের ভিত্তিতে অগ্রগতি দেখানো হয়।"
+
+msgid "New goal title"
+msgstr "নতুন লক্ষ্যের নাম"
+
+msgid "Target date · YYYY-MM-DD"
+msgstr "লক্ষ্য পূরণের তারিখ · YYYY-MM-DD"
+
+msgid "Add goal"
+msgstr "লক্ষ্য যোগ করুন"
+
+msgid "Show archived"
+msgstr "আর্কাইভ করা লক্ষ্য দেখুন"
+
+msgid "Back to goals"
+msgstr "লক্ষ্যের তালিকায় ফিরুন"
+
+msgid "Could not create goal: {0}"
+msgstr "লক্ষ্য তৈরি করা যায়নি: {0}"
+
+msgid "Could not load goals: {0}"
+msgstr "লক্ষ্য লোড করা যায়নি: {0}"
+
+msgid "No archived goals."
+msgstr "আর্কাইভে কোনো লক্ষ্য নেই।"
+
+msgid "No goals yet. Add your first goal above."
+msgstr "এখনও কোনো লক্ষ্য নেই। উপরে প্রথম লক্ষ্য যোগ করুন।"
+
+msgid "Target {0}"
+msgstr "লক্ষ্য তারিখ {0}"
+
+msgid "No target date"
+msgstr "লক্ষ্য পূরণের তারিখ নেই"
+
+msgid "{0}% · {1}/{2} milestones · {3} skipped · {4} linked habits"
+msgstr "{0}% · {1}/{2}টি মাইলস্টোন · {3}টি বাদ · {4}টি যুক্ত অভ্যাস"
+
+msgid "Milestones"
+msgstr "মাইলস্টোন"
+
+msgid "Reopen"
+msgstr "আবার খুলুন"
+
+msgid "Complete goal"
+msgstr "লক্ষ্য সম্পন্ন করুন"
+
+msgid "Edit goal"
+msgstr "লক্ষ্য সম্পাদনা"
+
+msgid "Goal title"
+msgstr "লক্ষ্যের নাম"
+
+msgid "Short description"
+msgstr "সংক্ষিপ্ত বিবরণ"
+
+msgid "Target date · YYYY-MM-DD (optional)"
+msgstr "লক্ষ্য পূরণের তারিখ · YYYY-MM-DD (ঐচ্ছিক)"
+
+msgid "Save changes"
+msgstr "পরিবর্তন সংরক্ষণ"
+
+msgid "Could not update goal: {0}"
+msgstr "লক্ষ্য আপডেট করা যায়নি: {0}"
+
+msgid "Milestones · {0}"
+msgstr "মাইলস্টোন · {0}"
+
+msgid "New milestone"
+msgstr "নতুন মাইলস্টোন"
+
+msgid "Due · YYYY-MM-DD"
+msgstr "সময়সীমা · YYYY-MM-DD"
+
+msgid "Add"
+msgstr "যোগ করুন"
+
+msgid "Could not add milestone: {0}"
+msgstr "মাইলস্টোন যোগ করা যায়নি: {0}"
+
+msgid "Could not load milestones: {0}"
+msgstr "মাইলস্টোন লোড করা যায়নি: {0}"
+
+msgid "No milestones yet. Add the first step above."
+msgstr "এখনও কোনো মাইলস্টোন নেই। উপরে প্রথম ধাপটি যোগ করুন।"
+
+msgid "No due date"
+msgstr "সময়সীমা নেই"
+
+msgid "Skipped"
+msgstr "বাদ দেওয়া হয়েছে"
+
+msgid "Complete"
+msgstr "সম্পন্ন করুন"
+
+msgid "Could not update milestone: {0}"
+msgstr "মাইলস্টোন আপডেট করা যায়নি: {0}"
+
+msgid "Skip"
+msgstr "বাদ দিন"
+
+msgid "goal title must contain between 1 and 120 characters"
+msgstr "লক্ষ্যের নামে ১ থেকে ১২০টি অক্ষর থাকতে হবে"
+
+msgid "milestone title must contain between 1 and 120 characters"
+msgstr "মাইলস্টোনের নামে ১ থেকে ১২০টি অক্ষর থাকতে হবে"
+
+msgid "description must be 2,000 characters or fewer"
+msgstr "বিবরণ সর্বোচ্চ ২,০০০ অক্ষরের হতে হবে"
+
+msgid "date must be a real calendar date in YYYY-MM-DD format"
+msgstr "তারিখটি YYYY-MM-DD বিন্যাসে একটি বৈধ ক্যালেন্ডার তারিখ হতে হবে"
+
+msgid "unsupported goal status"
+msgstr "লক্ষ্যের অবস্থা সমর্থিত নয়"
+
+msgid "habit name must contain between 1 and 120 characters"
+msgstr "অভ্যাসের নামে ১ থেকে ১২০টি অক্ষর থাকতে হবে"
+
+msgid "Link habits"
+msgstr "অভ্যাস যুক্ত করুন"
+
+msgid "Select the habits that support this goal. Linking habits does not automatically change milestone progress."
+msgstr "এই লক্ষ্যকে সহায়তা করে এমন অভ্যাস নির্বাচন করুন। অভ্যাস যুক্ত করলে মাইলস্টোনের অগ্রগতি নিজে থেকে বাড়ে না।"
+
+msgid "{0} linked · {1} available"
+msgstr "{0}টি যুক্ত · {1}টি পাওয়া যাচ্ছে"
+
+msgid "Save links"
+msgstr "লিংক সংরক্ষণ"
+
+msgid "Could not save habit links: {0}"
+msgstr "অভ্যাসের লিংক সংরক্ষণ করা যায়নি: {0}"
+
+msgid "No unarchived habits are available yet. Create a habit in Today, then return here."
+msgstr "এখনও কোনো সক্রিয় অভ্যাস নেই। আজকের পাতায় একটি অভ্যাস তৈরি করে এখানে ফিরে আসুন।"
+
+msgid "Habit Trackers by Madhab"
+msgstr "مাধবের অভ্যাস ট্র্যাকার"
