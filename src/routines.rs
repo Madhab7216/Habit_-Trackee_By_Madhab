@@ -7,7 +7,10 @@
 use crate::domain::CivilDate;
 use gtk::prelude::*;
 use rusqlite::{Connection, OptionalExtension, Result, params};
-use std::{cell::{Cell, RefCell}, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 const ROUTINE_MIGRATION: &str = include_str!("../migrations/0004_routines.sql");
 type Refresh = Rc<dyn Fn()>;
@@ -760,12 +763,7 @@ pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection
         } else {
             "Include archived routines"
         });
-        refresh_routine_list(
-            &view_parent,
-            &view_list,
-            &view_connection,
-            show_archived,
-        );
+        refresh_routine_list(&view_parent, &view_list, &view_connection, show_archived);
     });
 
     let editor_parent = window.clone();
