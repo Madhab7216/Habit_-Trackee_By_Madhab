@@ -8,7 +8,8 @@ Audit date: 2026-11-14
 - Default branch: `main`; kept unchanged.
 - Primary implementation branch: `work/linux-mint-habit-tracker-foundation`
 - Primary pull request: [#1 — M0–M3 foundation: GTK4 habit tracker, scheduling, scoring and pause/resume](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1), open and draft.
-- Stacked work branches/PRs for M3, M5 and M6 have their own history; their implementation is being consolidated into PR #1. No side branch has been deleted or force-pushed.
+- The M3 schedule integration, M5 Goals & Milestones and M6 local portability increments are present on the current foundation feature branch.
+- Separate M4 persisted scoring work is proposed on `work/m4-persisted-scoring` with [Draft PR #12](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/12); it is stacked on the foundation and does not edit the M5 goals or M6 portability modules.
 - Target-machine validation issue: [#2 — validate on the target Linux Mint workstation](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/2).
 
 ## Implemented in the current feature increment
@@ -30,14 +31,15 @@ Audit date: 2026-11-14
 - Habit rename/edit, archive with history preservation and restore.
 - Weekly frequency quota is bounded to 1–7 sessions; same-day frequency check-ins accumulate.
 
-### M4 — scoring foundation
-- Deterministic Gregorian civil date and schedule-period handling.
-- At-least and at-most measurement ratio functions.
-- Adherence, EMA habit-strength estimate and current streak as distinct measures.
-- Closed missed periods contribute zero; skipped and fully paused periods are excluded.
-- An open current day/week is not counted as missed early.
-- Weekly frequency targets are prorated when some days of that week are paused.
-- Full behavior contract in [SCORING_POLICY.md](SCORING_POLICY.md).
+### M4 — persisted scoring v1 (separate M4 branch)
+- Connect the existing domain achievement, adherence, EMA and streak functions to SQLite `habit_entries` and `habit_pause_periods`.
+- Read-only deterministic replay via `scoring::summaries_for_date(connection, as_of)`; Today uses `summaries_for_today`.
+- Display separate adherence, EMA habit-strength estimate and current streak in the GTK **Progress & scores** workspace.
+- Score version is shown with closed/scored, missed, skipped and paused period counts.
+- Closed missed periods contribute zero; daily skips and fully paused periods are excluded; current open day/week is not counted as missed.
+- Weekly frequency sessions aggregate toward the quota and partial-week pauses prorate the target.
+- Replay rebuilds from source records on demand; no stale score cache, network request or telemetry is added.
+- Implementation and test boundaries: [M4 persisted scoring](M4_PERSISTED_SCORING.md); behavior contract: [SCORING_POLICY.md](SCORING_POLICY.md). [Draft PR #12](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/12) passes exact-head hosted CI: 87 Rust tests plus formatting, build, Clippy, schema and data-portability checks. Target Linux Mint GUI validation remains open.
 
 ### M5 — Goals & Milestones
 - Additive goal-milestone table migration; existing goals and habit links remain.
@@ -56,15 +58,18 @@ Audit date: 2026-11-14
 
 ## Validation boundary
 
-Earlier M3 and M5 workflow runs passed all relevant engineering checks on their own branch heads. M6's first dedicated run failed only the formatting gate for one import layout in `src/portability.rs`; that formatting delta has been corrected in the consolidation blob.
+M4 persisted scoring has passed exact-head hosted CI on commit `ea3f27b3cc59358c2e792dadcfb437a09c6d5cb8`:
+- Engineering Checks push run [#82](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions/runs/43617899103): format, compile, Rust tests (87 passed), Clippy, schema tests and audit-script syntax all passed.
+- Engineering Checks PR run [#83](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions/runs/43617903711): all three jobs passed.
+- Data Portability Checks PR run [#29](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions/runs/43617903718): backup, restore and CSV export checks passed.
 
-A new CI run must complete on the exact latest PR #1 head before the combined increment is described as CI-green. The actual GTK application still needs to be launched and exercised on the target Linux Mint workstation (Issue #2).
+These hosted Ubuntu checks do not replace the actual GTK application launch, persistence and manual interaction test on the target Linux Mint workstation (Issue #2). PR #1 also needs validation on its own latest head.
 
 ## Remaining v1.0 blockers
 
-1. Verify newest-head GitHub Actions results.
+1. Complete exact-head CI on PR #1; separate M4 persisted scoring CI is passing on its latest PR head.
 2. Complete target Linux Mint install/build/launch and upgrade tests.
-3. Add a full schedule editor and effective-date versioning/confirmation so schedule changes do not silently reinterpret past periods.
+3. Add effective-dated schedule versioning/confirmation so schedule edits do not silently reinterpret past scoring; the recurrence editor still needs a complete editing workflow.
 4. Finish Bengali/English localization and keyboard/screen-reader accessibility.
 5. Add goal-to-task/routine workflows, weekly reviews and richer calendar analytics.
 6. Add a GTK export/backup dialog, retention guidance and recovery UX around the CLI.
