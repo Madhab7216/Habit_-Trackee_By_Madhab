@@ -423,7 +423,11 @@ mod tests {
         set_today_completed(&connection, habit_id, true).expect("complete habit");
 
         archive_habit(&connection, habit_id).expect("archive habit");
-        assert!(today_habits(&connection).expect("load active habits").is_empty());
+        assert!(
+            today_habits(&connection)
+                .expect("load active habits")
+                .is_empty()
+        );
         let archived = archived_habits(&connection).expect("load archived habits");
         assert_eq!(archived.len(), 1);
         assert_eq!(archived[0].name, "Walk");
