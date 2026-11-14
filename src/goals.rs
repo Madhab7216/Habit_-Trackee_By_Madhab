@@ -332,6 +332,87 @@ pub fn unlink_habit_from_goal(connection: &Connection, goal_id: i64, habit_id: i
     Ok(())
 }
 
+
+/// A non-archived habit and its current relationship to a goal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkableHabit {
+    pub id: i64,
+    pub name: String,
+    pub linked: bool,
+}
+
+/// List all non-archived habits that may be linked to a non-archived goal.
+pub fn list_linkable_habits(connection: &Connection, goal_id: i64) -> Result<Vec<LinkableHabit>> {
+    let goal_is_linkable: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM goals WHERE id = ?1 AND status <> 'archived')",
+        [goal_id],
+        |row| row.get(0),
+    )?;
+    if !goal_is_linkable {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+
+    let mut statement = connection.prepare(
+        "SELECT h.id, h.name, (gh.habit_id IS NOT NULL)
+         FROM habits h
+         LEFT JOIN goal_habits gh
+           ON gh.habit_id = h.id AND gh.goal_id = ?1
+         WHERE h.archived_at IS NULL
+         ORDER BY h.sort_order, h.name COLLATE NOCASE, h.id",
+    )?;
+    let rows = statement.query_map([goal_id], |row| {
+        Ok(LinkableHabit {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            linked: row.get(2)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Replace a goal's habit links as one transaction.
+/// Invalid goal or archived/missing habit IDs leave the previous links untouched.
+pub fn set_goal_habit_links(
+    connection: &mut Connection,
+    goal_id: i64,
+    habit_ids: &[i64],
+) -> Result<()> {
+    let mut normalized_ids = habit_ids.to_vec();
+    normalized_ids.sort_unstable();
+    normalized_ids.dedup();
+
+    let transaction = connection.transaction()?;
+    let goal_is_linkable: bool = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM goals WHERE id = ?1 AND status <> 'archived')",
+        [goal_id],
+        |row| row.get(0),
+    )?;
+    if !goal_is_linkable {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+
+    for habit_id in &normalized_ids {
+        let habit_is_linkable: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL)",
+            [habit_id],
+            |row| row.get(0),
+        )?;
+        if !habit_is_linkable {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+    }
+
+    transaction.execute("DELETE FROM goal_habits WHERE goal_id = ?1", [goal_id])?;
+    for habit_id in normalized_ids {
+        transaction.execute(
+            "INSERT INTO goal_habits(goal_id, habit_id) VALUES (?1, ?2)",
+            params![goal_id, habit_id],
+        )?;
+    }
+    transaction.commit()?;
+    Ok(())
+}
+
 pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Connection>>) {
     if let Err(error) = ensure_schema(&connection.borrow()) {
         eprintln!("Could not prepare goal storage: {error}");
@@ -519,6 +600,25 @@ fn refresh_goal_list(
 
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         let milestones_button = gtk::Button::with_label("Milestones");
+        let manage_habits_button = gtk::Button::with_label("Link habits");
+        manage_habits_button.set_sensitive(!archived_view);
+        let manage_parent = parent.clone();
+        let manage_goals_list = list.clone();
+        let manage_connection = Rc::clone(connection);
+        let manage_goal_id = goal.id;
+        let manage_goal_title = goal.title.clone();
+        manage_habits_button.connect_clicked(move |_| {
+            open_goal_habits_window(
+                &manage_parent,
+                &manage_goals_list,
+                Rc::clone(&manage_connection),
+                manage_goal_id,
+                &manage_goal_title,
+                archived_view,
+            );
+        });
+        actions.append(&manage_habits_button);
+
         let edit_button = gtk::Button::with_label("Edit");
         edit_button.set_sensitive(!archived_view);
         actions.append(&milestones_button);
@@ -637,6 +737,137 @@ fn refresh_goal_list(
         row.set_child(Some(&card));
         list.append(&row);
     }
+}
+
+
+/// Let users select the unarchived habits that support a goal.
+/// Saving replaces the complete selection atomically; Cancel never writes changes.
+fn open_goal_habits_window(
+    parent: &gtk::Window,
+    goals_list: &gtk::ListBox,
+    connection: Rc<RefCell<Connection>>,
+    goal_id: i64,
+    goal_title: &str,
+    archived_view: bool,
+) {
+    let window = gtk::Window::builder()
+        .title(format!("Linked habits · {goal_title}"))
+        .transient_for(parent)
+        .modal(true)
+        .default_width(520)
+        .default_height(520)
+        .build();
+
+    let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    root.set_margin_top(20);
+    root.set_margin_bottom(20);
+    root.set_margin_start(24);
+    root.set_margin_end(24);
+
+    let heading = gtk::Label::new(Some(goal_title));
+    heading.add_css_class("title-2");
+    heading.set_xalign(0.0);
+
+    let explanation = gtk::Label::new(Some(
+        "Select the habits that support this goal. Linking habits does not automatically change milestone progress.",
+    ));
+    explanation.set_xalign(0.0);
+    explanation.set_wrap(true);
+    explanation.add_css_class("dim-label");
+
+    let selection_list = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    let options = match list_linkable_habits(&connection.borrow(), goal_id) {
+        Ok(options) => options,
+        Err(error) => {
+            eprintln!("Could not load goal habit links: {error}");
+            Vec::new()
+        }
+    };
+
+    let linked_count = options.iter().filter(|habit| habit.linked).count();
+    let summary = gtk::Label::new(Some(&format!(
+        "{linked_count} linked · {} available",
+        options.len()
+    )));
+    summary.set_xalign(0.0);
+    summary.add_css_class("dim-label");
+
+    let mut controls: Vec<(i64, gtk::CheckButton)> = Vec::new();
+    if options.is_empty() {
+        let empty = gtk::Label::new(Some(
+            "No unarchived habits are available yet. Create a habit in Today, then return here.",
+        ));
+        empty.set_xalign(0.0);
+        empty.set_wrap(true);
+        empty.add_css_class("dim-label");
+        selection_list.append(&empty);
+    } else {
+        for habit in options {
+            let check = gtk::CheckButton::with_label(&habit.name);
+            check.set_active(habit.linked);
+            selection_list.append(&check);
+            controls.push((habit.id, check));
+        }
+    }
+
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_vexpand(true);
+    scroller.set_child(Some(&selection_list));
+
+    let feedback = gtk::Label::new(None);
+    feedback.set_xalign(0.0);
+    feedback.add_css_class("error");
+
+    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    actions.set_halign(gtk::Align::End);
+    let cancel = gtk::Button::with_label("Cancel");
+    let save = gtk::Button::with_label("Save links");
+    save.add_css_class("suggested-action");
+    actions.append(&cancel);
+    actions.append(&save);
+
+    root.append(&heading);
+    root.append(&explanation);
+    root.append(&summary);
+    root.append(&scroller);
+    root.append(&feedback);
+    root.append(&actions);
+    window.set_child(Some(&root));
+
+    let save_window = window.clone();
+    let save_list = goals_list.clone();
+    let save_parent = parent.clone();
+    let save_connection = Rc::clone(&connection);
+    let save_feedback = feedback.clone();
+    save.connect_clicked(move |_| {
+        let selected_ids: Vec<i64> = controls
+            .iter()
+            .filter_map(|(habit_id, check)| check.is_active().then_some(*habit_id))
+            .collect();
+        let result = {
+            let mut connection = save_connection.borrow_mut();
+            set_goal_habit_links(&mut connection, goal_id, &selected_ids)
+        };
+        match result {
+            Ok(()) => {
+                save_window.close();
+                refresh_goal_list(
+                    &save_list,
+                    &save_parent,
+                    &save_connection,
+                    archived_view,
+                );
+            }
+            Err(error) => {
+                save_feedback.set_text(&format!("Could not save habit links: {error}"));
+            }
+        }
+    });
+
+    let cancel_window = window.clone();
+    cancel.connect_clicked(move |_| cancel_window.close());
+
+    window.present();
 }
 
 fn open_goal_editor(
@@ -1025,6 +1256,83 @@ mod tests {
         assert_eq!(list_goals(&connection, false).unwrap()[0].linked_habits, 1);
         unlink_habit_from_goal(&connection, goal_id, habit_id).unwrap();
         assert_eq!(list_goals(&connection, false).unwrap()[0].linked_habits, 0);
+    }
+
+
+    #[test]
+    fn linkable_habit_picker_excludes_archived_habits_and_marks_existing_links() {
+        let connection = test_connection();
+        let goal_id = goal(&connection);
+        connection
+            .execute("INSERT INTO habits(name) VALUES ('Read 20 pages'), ('Run'), ('Archived habit')", [])
+            .unwrap();
+        let read_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Read 20 pages'", [], |row| row.get(0))
+            .unwrap();
+        let archived_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Archived habit'", [], |row| row.get(0))
+            .unwrap();
+        connection
+            .execute("UPDATE habits SET archived_at = CURRENT_TIMESTAMP WHERE id = ?1", [archived_id])
+            .unwrap();
+        link_habit_to_goal(&connection, goal_id, read_id).unwrap();
+
+        let options = list_linkable_habits(&connection, goal_id).unwrap();
+        assert_eq!(options.len(), 2);
+        assert_eq!(options[0].name, "Read 20 pages");
+        assert!(options[0].linked);
+        assert_eq!(options[1].name, "Run");
+        assert!(!options[1].linked);
+        assert!(list_linkable_habits(&connection, 999).is_err());
+    }
+
+    #[test]
+    fn replacing_goal_habit_links_is_atomic_and_deduplicates_ids() {
+        let mut connection = test_connection();
+        let goal_id = goal(&connection);
+        connection
+            .execute("INSERT INTO habits(name) VALUES ('Read'), ('Run'), ('Archived')", [])
+            .unwrap();
+        let read_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Read'", [], |row| row.get(0))
+            .unwrap();
+        let run_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Run'", [], |row| row.get(0))
+            .unwrap();
+        let archived_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Archived'", [], |row| row.get(0))
+            .unwrap();
+        connection
+            .execute("UPDATE habits SET archived_at = CURRENT_TIMESTAMP WHERE id = ?1", [archived_id])
+            .unwrap();
+
+        set_goal_habit_links(&mut connection, goal_id, &[read_id]).unwrap();
+        set_goal_habit_links(&mut connection, goal_id, &[run_id, run_id]).unwrap();
+
+        let linked: Vec<i64> = {
+            let mut statement = connection
+                .prepare("SELECT habit_id FROM goal_habits WHERE goal_id = ?1 ORDER BY habit_id")
+                .unwrap();
+            statement
+                .query_map([goal_id], |row| row.get(0))
+                .unwrap()
+                .collect::<Result<Vec<_>>>()
+                .unwrap()
+        };
+        assert_eq!(linked, vec![run_id]);
+
+        assert!(set_goal_habit_links(&mut connection, goal_id, &[archived_id]).is_err());
+        let still_linked: Vec<i64> = {
+            let mut statement = connection
+                .prepare("SELECT habit_id FROM goal_habits WHERE goal_id = ?1 ORDER BY habit_id")
+                .unwrap();
+            statement
+                .query_map([goal_id], |row| row.get(0))
+                .unwrap()
+                .collect::<Result<Vec<_>>>()
+                .unwrap()
+        };
+        assert_eq!(still_linked, vec![run_id]);
     }
 
     #[test]
