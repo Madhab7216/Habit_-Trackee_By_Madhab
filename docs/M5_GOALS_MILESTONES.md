@@ -45,3 +45,12 @@ Rust tests cover date validation, title limits, progress math, skipped milestone
 - Automatic habit-completion contribution to goal progress (requires the separate M4 scoring integration and an explicit, versioned contribution policy).
 - Bengali/English localization of this new window.
 - Permanent goal/milestone deletion.
+
+## Research rationale
+
+The feature emphasises short, observable milestones and a visible progress record rather than a single distant target. A meta-analysis of 138 experimental studies (19,951 participants) found that interventions that increased goal-progress monitoring also improved goal attainment on average; the reported pooled effect on attainment was d+ = 0.40. A separate meta-analysis of 141 papers found a small positive effect for goal setting (d = 0.34). These findings support explicit milestones and visible progress, but they do not prove that this specific UI will produce the same effects for every user.
+
+- Harkin et al., *Does Monitoring Goal Progress Promote Goal Attainment?*, Psychological Bulletin (2016): https://pubmed.ncbi.nlm.nih.gov/26479070/
+- Epton et al., *Unique Effects of Setting Goals on Behavior Change*, Journal of Consulting and Clinical Psychology (2017): https://pubmed.ncbi.nlm.nih.gov/29189034/
+
+The date guard uses SQLite `strftime('%Y-%m-%d', ...)` plus an explicit non-NULL test. SQLite documents that date/time functions return NULL for unsupported or invalid time-values; the Rust layer additionally validates Gregorian leap days and month lengths before persistence: https://www.sqlite.org/lang_datefunc.html. The progress widget uses GTK's native `ProgressBar`, which exposes progress values through GTK's accessibility role/properties: https://gtk-rs.org/gtk4-rs/stable/latest/docs/gtk4/struct.ProgressBar.html.
