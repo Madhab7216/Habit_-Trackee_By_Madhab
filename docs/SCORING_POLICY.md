@@ -1,6 +1,6 @@
 # Habit scoring policy — v1
 
-The data layer exposes transparent adherence, an EMA habit-strength estimate and current streak separately. These are personal tracking indicators, not clinical or psychological measurements.
+The scoring engine replays local SQLite check-ins and pause periods on demand. It exposes transparent adherence, an EMA habit-strength estimate and current streak separately, labelled **scoring version 1**. These are personal tracking indicators, not clinical or psychological measurements.
 
 ## Achievement ratio
 
@@ -32,6 +32,15 @@ Same-day weekly sessions accumulate. Partial-week pauses reduce the weekly targe
 - Habit strength estimate: EMA with alpha 0.25; first eligible period initializes the value and later periods use `0.25 × current + 0.75 × previous`.
 - Current streak: consecutive successful eligible periods ending at the latest closed period. A period must reach 1.0.
 
+## Persisted replay implementation
+
+- `scoring::summaries_for_today(connection)` evaluates active habits using the computer's current local date.
+- `scoring::summaries_for_date(connection, as_of)` is deterministic; `as_of` is an exclusive boundary, so an open current day or week is not marked missed.
+- Scores are rebuilt from `habit_entries` and `habit_pause_periods` on demand. No materialized score cache or remote service is used.
+- The summary includes the scoring version, adherence, EMA, streak, closed/scored periods, missed periods, skipped periods and paused periods.
+- Archived habits are excluded. Invalid stored dates, schedules, measurement directions and targets return a data error rather than a fabricated score.
+- For a weekly frequency habit, a whole active week that is explicitly skipped is excluded. If skips are mixed with other uncompleted active days and there is no completed/partial session, the weekly quota is missed. Completed/partial session values accumulate toward the weekly target.
+
 ## Known limitations
 
-Schedule edits currently update the active definition and can change how historical periods are interpreted. Before v1.0, effective-dated schedule definitions or an explicit retroactive-change confirmation are required. The application uses the OS local date; user-selected IANA timezones and DST/travel behavior remain outstanding.
+Schedule edits currently update the active definition and can change how historical periods are interpreted. Before v1.0, effective-dated schedule definitions or an explicit retroactive-change confirmation are required. The application uses the OS local date; user-selected IANA timezones and DST/travel behavior remain outstanding. Numeric entry forms and edit-time schedule controls are still being built; this scoring integration evaluates the measurement values already present in the local database.
