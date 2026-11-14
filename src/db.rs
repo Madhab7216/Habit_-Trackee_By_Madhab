@@ -89,18 +89,81 @@ fn migrate(connection: &mut Connection) -> Result<()> {
     Ok(())
 }
 
-pub fn create_habit(connection: &Connection, name: &str) -> Result<()> {
+fn validate_habit_name(name: &str) -> Result<&str> {
     let normalized = name.trim();
     if normalized.is_empty() || normalized.chars().count() > 120 {
         return Err(rusqlite::Error::InvalidParameterName(
             "habit name must contain between 1 and 120 characters".to_string(),
         ));
     }
+    Ok(normalized)
+}
+
+pub fn create_habit(connection: &Connection, name: &str) -> Result<()> {
+    let normalized = validate_habit_name(name)?;
     connection.execute(
         "INSERT INTO habits(name, tracking_type, schedule_type) VALUES (?1, 'binary', 'daily')",
         params![normalized],
     )?;
     Ok(())
+}
+
+/// Rename an active habit without changing its history or schedule.
+pub fn rename_habit(connection: &Connection, habit_id: i64, name: &str) -> Result<()> {
+    let normalized = validate_habit_name(name)?;
+    let changed = connection.execute(
+        "UPDATE habits SET name = ?1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?2 AND archived_at IS NULL",
+        params![normalized, habit_id],
+    )?;
+    if changed == 0 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    Ok(())
+}
+
+/// Archive is reversible and preserves every check-in, schedule and pause record.
+pub fn archive_habit(connection: &Connection, habit_id: i64) -> Result<()> {
+    let changed = connection.execute(
+        "UPDATE habits
+         SET archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?1",
+        [habit_id],
+    )?;
+    if changed == 0 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    Ok(())
+}
+
+pub fn restore_habit(connection: &Connection, habit_id: i64) -> Result<()> {
+    let changed = connection.execute(
+        "UPDATE habits SET archived_at = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?1",
+        [habit_id],
+    )?;
+    if changed == 0 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    Ok(())
+}
+
+pub fn archived_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name, 0, 0 FROM habits
+         WHERE archived_at IS NOT NULL
+         ORDER BY archived_at DESC, id DESC",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(TodayHabit {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            completed: row.get::<_, i64>(2)? != 0,
+            paused: row.get::<_, i64>(3)? != 0,
+        })
+    })?;
+    rows.collect()
 }
 
 pub fn today_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
@@ -168,6 +231,15 @@ pub fn set_paused(connection: &Connection, habit_id: i64, paused: bool) -> Resul
 }
 
 pub fn set_today_completed(connection: &Connection, habit_id: i64, completed: bool) -> Result<()> {
+    let active: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL)",
+        [habit_id],
+        |row| row.get(0),
+    )?;
+    if !active {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+
     if completed {
         let paused: bool = connection.query_row(
             "SELECT EXISTS (
@@ -321,4 +393,62 @@ mod tests {
         let connection = memory_connection();
         assert!(set_paused(&connection, 999, true).is_err());
     }
+    #[test]
+    fn rename_preserves_existing_habit_history() {
+        let connection = memory_connection();
+        create_habit(&connection, "Read").expect("create habit");
+        let habit_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Read'", [], |row| row.get(0))
+            .expect("read habit id");
+        set_today_completed(&connection, habit_id, true).expect("complete habit");
+
+        rename_habit(&connection, habit_id, "  Read twenty pages  ").expect("rename habit");
+
+        let habits = today_habits(&connection).expect("load habits");
+        assert_eq!(habits[0].name, "Read twenty pages");
+        assert!(habits[0].completed);
+    }
+
+    #[test]
+    fn archive_and_restore_preserve_checkins() {
+        let connection = memory_connection();
+        create_habit(&connection, "Walk").expect("create habit");
+        let habit_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Walk'", [], |row| row.get(0))
+            .expect("read habit id");
+        set_today_completed(&connection, habit_id, true).expect("complete habit");
+
+        archive_habit(&connection, habit_id).expect("archive habit");
+        assert!(today_habits(&connection).expect("load active habits").is_empty());
+        let archived = archived_habits(&connection).expect("load archived habits");
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].name, "Walk");
+
+        assert!(set_today_completed(&connection, habit_id, false).is_err());
+        restore_habit(&connection, habit_id).expect("restore habit");
+
+        let restored = today_habits(&connection).expect("load restored habit");
+        assert_eq!(restored.len(), 1);
+        assert!(restored[0].completed);
+    }
+
+    #[test]
+    fn rename_rejects_empty_and_overlong_names() {
+        let connection = memory_connection();
+        create_habit(&connection, "Journal").expect("create habit");
+        let habit_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Journal'", [], |row| row.get(0))
+            .expect("read habit id");
+
+        assert!(rename_habit(&connection, habit_id, "   ").is_err());
+        assert!(rename_habit(&connection, habit_id, &"x".repeat(121)).is_err());
+    }
+
+    #[test]
+    fn archive_rejects_unknown_habits() {
+        let connection = memory_connection();
+        assert!(archive_habit(&connection, 999).is_err());
+        assert!(restore_habit(&connection, 999).is_err());
+    }
+
 }
