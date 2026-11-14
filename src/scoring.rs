@@ -79,6 +79,7 @@ struct PeriodEvaluation {
 
 #[derive(Debug)]
 struct PeriodBucket {
+    period_start: i64,
     span_days: u8,
     days: Vec<ScheduledDay>,
 }
@@ -221,13 +222,7 @@ fn summarize_habit(
 
     let mut evaluations = Vec::new();
     for bucket in buckets.into_values() {
-        if bucket.days.is_empty() {
-            continue;
-        }
-        // A period is closed only after its last scheduled day has passed. This
-        // also closes a final short week after a habit's stored end date.
-        let last_date = bucket.days.last().expect("non-empty period").date;
-        if last_date >= as_of {
+        if bucket.days.is_empty() || !period_is_closed(config.schedule, &bucket, as_of) {
             continue;
         }
         evaluations.push(evaluate_period(&config, &bucket)?);
@@ -355,6 +350,7 @@ fn build_period_buckets(
             buckets
                 .entry(period.start_day)
                 .or_insert_with(|| PeriodBucket {
+                    period_start: period.start_day,
                     span_days: period.span_days,
                     days: Vec::new(),
                 })
@@ -364,6 +360,16 @@ fn build_period_buckets(
     }
 
     Ok(buckets)
+}
+
+
+fn period_is_closed(schedule: HabitSchedule, bucket: &PeriodBucket, as_of: CivilDate) -> bool {
+    let natural_end = bucket.period_start + i64::from(bucket.span_days) - 1;
+    let scheduled_end = schedule
+        .end()
+        .map(|end| end.ordinal().min(natural_end))
+        .unwrap_or(natural_end);
+    scheduled_end < as_of.ordinal()
 }
 
 fn evaluate_period(config: &HabitConfig, bucket: &PeriodBucket) -> Result<PeriodEvaluation> {
@@ -568,8 +574,8 @@ mod tests {
         assert_eq!(result.closed_periods, 14);
         assert_eq!(result.missed_periods, 11);
         assert_eq!(result.skipped_periods, 1);
-        assert_eq!(result.adherence, Some(3.0 / 14.0));
-        assert_eq!(result.current_streak, 0);
+        assert_eq!(result.adherence, Some(3.0 / 13.0));
+        assert_eq!(result.current_streak, 1);
     }
 
     #[test]
@@ -605,10 +611,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(result.closed_periods, 5);
-        assert_eq!(result.scored_periods, 3);
+        assert_eq!(result.scored_periods, 2);
         assert_eq!(result.skipped_periods, 1);
         assert_eq!(result.paused_periods, 2);
-        assert_eq!(result.adherence, Some(1.0 / 3.0));
+        assert_eq!(result.adherence, Some(0.5));
     }
 
     #[test]
