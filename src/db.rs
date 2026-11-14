@@ -255,7 +255,9 @@ mod tests {
     fn migrations_reach_schema_version_two() {
         let connection = memory_connection();
         let version: i64 = connection
-            .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| row.get(0))
+            .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
             .expect("read schema version");
         assert_eq!(version, 2);
     }
@@ -265,7 +267,11 @@ mod tests {
         let connection = memory_connection();
         create_habit(&connection, "Read 20 pages").expect("create habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Read 20 pages'", [], |row| row.get(0))
+            .query_row(
+                "SELECT id FROM habits WHERE name = 'Read 20 pages'",
+                [],
+                |row| row.get(0),
+            )
             .expect("read habit id");
 
         set_paused(&connection, habit_id, true).expect("pause habit");
@@ -292,7 +298,9 @@ mod tests {
         let connection = memory_connection();
         create_habit(&connection, "Meditate").expect("create habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Meditate'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Meditate'", [], |row| {
+                row.get(0)
+            })
             .expect("read habit id");
 
         set_paused(&connection, habit_id, true).expect("pause once");
