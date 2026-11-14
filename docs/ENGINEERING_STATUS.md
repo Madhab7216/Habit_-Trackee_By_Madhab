@@ -39,7 +39,7 @@ Audit date: 2026-11-14
 - Closed missed periods contribute zero; daily skips and fully paused periods are excluded; current open day/week is not counted as missed.
 - Weekly frequency sessions aggregate toward the quota and partial-week pauses prorate the target.
 - Replay rebuilds from source records on demand; no stale score cache, network request or telemetry is added.
-- Implementation and test boundaries: [M4 persisted scoring](M4_PERSISTED_SCORING.md); behavior contract: [SCORING_POLICY.md](SCORING_POLICY.md). Draft PR #12 still requires exact-head CI and target-machine GUI validation.
+- Implementation and test boundaries: [M4 persisted scoring](M4_PERSISTED_SCORING.md); behavior contract: [SCORING_POLICY.md](SCORING_POLICY.md). [Draft PR #12](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/12) passes exact-head hosted CI: 87 Rust tests plus formatting, build, Clippy, schema and data-portability checks. Target Linux Mint GUI validation remains open.
 
 ### M5 — Goals & Milestones
 - Additive goal-milestone table migration; existing goals and habit links remain.
@@ -58,13 +58,16 @@ Audit date: 2026-11-14
 
 ## Validation boundary
 
-Earlier M3 and M5 workflow runs passed all relevant engineering checks on their own branch heads. M6's first dedicated run failed only the formatting gate for one import layout in `src/portability.rs`; that formatting delta has been corrected in the consolidation blob.
+M4 persisted scoring has passed exact-head hosted CI on commit `ea3f27b3cc59358c2e792dadcfb437a09c6d5cb8`:
+- Engineering Checks push run [#82](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions/runs/43617899103): format, compile, Rust tests (87 passed), Clippy, schema tests and audit-script syntax all passed.
+- Engineering Checks PR run [#83](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions/runs/43617903711): all three jobs passed.
+- Data Portability Checks PR run [#29](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions/runs/43617903718): backup, restore and CSV export checks passed.
 
-The combined M2/M3/M5/M6 foundation must pass CI on the exact latest PR #1 head. The separate M4 scoring branch also needs a fresh exact-head CI run before it is described as validated. The actual GTK application still needs to be launched and exercised on the target Linux Mint workstation (Issue #2).
+These hosted Ubuntu checks do not replace the actual GTK application launch, persistence and manual interaction test on the target Linux Mint workstation (Issue #2). PR #1 also needs validation on its own latest head.
 
 ## Remaining v1.0 blockers
 
-1. Complete fresh exact-head CI on PR #1 and the separate M4 persisted scoring increment.
+1. Complete exact-head CI on PR #1; separate M4 persisted scoring CI is passing on its latest PR head.
 2. Complete target Linux Mint install/build/launch and upgrade tests.
 3. Add effective-dated schedule versioning/confirmation so schedule edits do not silently reinterpret past scoring; the recurrence editor still needs a complete editing workflow.
 4. Finish Bengali/English localization and keyboard/screen-reader accessibility.
