@@ -7,10 +7,7 @@
 use crate::domain::CivilDate;
 use gtk::prelude::*;
 use rusqlite::{Connection, OptionalExtension, Result, params};
-use std::{
-    cell::RefCell,
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 const ROUTINE_MIGRATION: &str = include_str!("../migrations/0004_routines.sql");
 type Refresh = Rc<dyn Fn()>;
@@ -19,7 +16,9 @@ type Refresh = Rc<dyn Fn()>;
 pub enum RoutineSchedule {
     Daily,
     /// Monday is bit 0; Sunday is bit 6.
-    Weekdays { weekday_mask: u8 },
+    Weekdays {
+        weekday_mask: u8,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -143,11 +142,17 @@ fn parse_date(value: &str) -> Option<CivilDate> {
 fn validate_draft(draft: &RoutineDraft) -> Result<()> {
     validate_title(&draft.title, "routine title", 120)?;
     if draft.description.chars().count() > 2_000 {
-        return Err(invalid_input("routine description must be 2,000 characters or fewer"));
+        return Err(invalid_input(
+            "routine description must be 2,000 characters or fewer",
+        ));
     }
     let start = parse_date(&draft.start_date)
         .ok_or_else(|| invalid_input("start date must be a real YYYY-MM-DD date"))?;
-    if let Some(end_text) = draft.end_date.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(end_text) = draft
+        .end_date
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         let end = parse_date(end_text)
             .ok_or_else(|| invalid_input("end date must be a real YYYY-MM-DD date"))?;
         if end < start {
@@ -160,7 +165,9 @@ fn validate_draft(draft: &RoutineDraft) -> Result<()> {
         }
     }
     if draft.steps.is_empty() || draft.steps.len() > 40 {
-        return Err(invalid_input("a routine must contain between 1 and 40 steps"));
+        return Err(invalid_input(
+            "a routine must contain between 1 and 40 steps",
+        ));
     }
     if !draft.steps.iter().any(|step| step.required) {
         return Err(invalid_input("at least one routine step must be required"));
@@ -168,7 +175,9 @@ fn validate_draft(draft: &RoutineDraft) -> Result<()> {
     for step in &draft.steps {
         validate_title(&step.title, "step title", 160)?;
         if step.details.chars().count() > 1_000 {
-            return Err(invalid_input("step details must be 1,000 characters or fewer"));
+            return Err(invalid_input(
+                "step details must be 1,000 characters or fewer",
+            ));
         }
     }
     Ok(())
@@ -193,7 +202,10 @@ pub fn ensure_schema(connection: &Connection) -> Result<()> {
     if version < 1 {
         let transaction = connection.unchecked_transaction()?;
         transaction.execute_batch(ROUTINE_MIGRATION)?;
-        transaction.execute("INSERT INTO routine_schema_migrations(version) VALUES (1)", [])?;
+        transaction.execute(
+            "INSERT INTO routine_schema_migrations(version) VALUES (1)",
+            [],
+        )?;
         transaction.commit()?;
     }
     Ok(())
@@ -217,18 +229,16 @@ fn validate_step_links(connection: &Connection, steps: &[NewRoutineStep]) -> Res
                 |row| row.get(0),
             )?;
             if !available {
-                return Err(invalid_input("linked habit must exist and must not be archived"));
+                return Err(invalid_input(
+                    "linked habit must exist and must not be archived",
+                ));
             }
         }
     }
     Ok(())
 }
 
-fn insert_steps(
-    connection: &Connection,
-    routine_id: i64,
-    steps: &[NewRoutineStep],
-) -> Result<()> {
+fn insert_steps(connection: &Connection, routine_id: i64, steps: &[NewRoutineStep]) -> Result<()> {
     for (index, step) in steps.iter().enumerate() {
         let (kind, habit_id) = match &step.kind {
             RoutineStepKind::Action => ("action", None),
@@ -256,7 +266,11 @@ pub fn create_routine(connection: &Connection, draft: &RoutineDraft) -> Result<i
     validate_draft(draft)?;
     validate_step_links(connection, &draft.steps)?;
     let (schedule_type, weekday_mask) = schedule_parts(draft.schedule);
-    let end_date = draft.end_date.as_deref().map(str::trim).filter(|value| !value.is_empty());
+    let end_date = draft
+        .end_date
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
     let transaction = connection.unchecked_transaction()?;
     transaction.execute(
@@ -279,11 +293,19 @@ pub fn create_routine(connection: &Connection, draft: &RoutineDraft) -> Result<i
 }
 
 /// Replace the editable template atomically. Existing routine-run snapshots are untouched.
-pub fn update_routine(connection: &Connection, routine_id: i64, draft: &RoutineDraft) -> Result<()> {
+pub fn update_routine(
+    connection: &Connection,
+    routine_id: i64,
+    draft: &RoutineDraft,
+) -> Result<()> {
     validate_draft(draft)?;
     validate_step_links(connection, &draft.steps)?;
     let (schedule_type, weekday_mask) = schedule_parts(draft.schedule);
-    let end_date = draft.end_date.as_deref().map(str::trim).filter(|value| !value.is_empty());
+    let end_date = draft
+        .end_date
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
     let transaction = connection.unchecked_transaction()?;
     let changed = transaction.execute(
@@ -304,7 +326,10 @@ pub fn update_routine(connection: &Connection, routine_id: i64, draft: &RoutineD
     if changed == 0 {
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
-    transaction.execute("DELETE FROM routine_steps WHERE routine_id = ?1", [routine_id])?;
+    transaction.execute(
+        "DELETE FROM routine_steps WHERE routine_id = ?1",
+        [routine_id],
+    )?;
     insert_steps(&transaction, routine_id, &draft.steps)?;
     transaction.commit()?;
     Ok(())
@@ -324,7 +349,10 @@ pub fn set_routine_status(connection: &Connection, routine_id: i64, status: &str
     Ok(())
 }
 
-pub fn list_routines(connection: &Connection, include_archived: bool) -> Result<Vec<RoutineSummary>> {
+pub fn list_routines(
+    connection: &Connection,
+    include_archived: bool,
+) -> Result<Vec<RoutineSummary>> {
     let mut statement = connection.prepare(
         "SELECT r.id, r.title, r.description, r.schedule_type, r.weekday_mask,
                 r.start_date, r.end_date, r.status, COUNT(s.id)
@@ -445,7 +473,13 @@ fn is_scheduled(routine: &RoutineSummary, date: CivilDate) -> bool {
     let Some(start) = parse_date(&routine.start_date) else {
         return false;
     };
-    if date < start || routine.end_date.as_deref().and_then(parse_date).is_some_and(|end| date > end) {
+    if date < start
+        || routine
+            .end_date
+            .as_deref()
+            .and_then(parse_date)
+            .is_some_and(|end| date > end)
+    {
         return false;
     }
     match routine.schedule {
@@ -462,16 +496,21 @@ pub fn local_today(connection: &Connection) -> Result<String> {
 
 /// Start a single run per routine per local date and snapshot the current ordered template.
 pub fn start_run(connection: &Connection, routine_id: i64, local_date: &str) -> Result<RoutineRun> {
-    let date = parse_date(local_date).ok_or_else(|| invalid_input("run date must be a real YYYY-MM-DD date"))?;
+    let date = parse_date(local_date)
+        .ok_or_else(|| invalid_input("run date must be a real YYYY-MM-DD date"))?;
     let definition = load_routine(connection, routine_id)?;
     if definition.routine.status != "active" {
         return Err(invalid_input("only active routines can be started"));
     }
     if !is_scheduled(&definition.routine, date) {
-        return Err(invalid_input("this routine is not scheduled for the selected date"));
+        return Err(invalid_input(
+            "this routine is not scheduled for the selected date",
+        ));
     }
     if definition.steps.is_empty() {
-        return Err(invalid_input("add at least one step before starting a routine"));
+        return Err(invalid_input(
+            "add at least one step before starting a routine",
+        ));
     }
 
     let transaction = connection.unchecked_transaction()?;
@@ -521,7 +560,15 @@ pub fn load_run(connection: &Connection, run_id: i64) -> Result<RoutineRun> {
         "SELECT routine_id, local_date, status, note, completed_at
          FROM routine_runs WHERE id = ?1",
         [run_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
     )?;
     let items = {
         let mut statement = connection.prepare(
@@ -686,11 +733,7 @@ pub fn open_window(parent: &ApplicationWindow, connection: Rc<RefCell<Connection
     let refresh_list = list.clone();
     let refresh_connection = Rc::clone(&connection);
     let refresh: Refresh = Rc::new(move || {
-        refresh_routine_list(
-            &refresh_parent,
-            &refresh_list,
-            &refresh_connection,
-        );
+        refresh_routine_list(&refresh_parent, &refresh_list, &refresh_connection);
     });
 
     let editor_parent = window.clone();
@@ -725,7 +768,10 @@ fn refresh_routine_list(
         }
     };
     if routines.is_empty() {
-        append_message(list, "No routines yet. Create your first repeatable checklist.");
+        append_message(
+            list,
+            "No routines yet. Create your first repeatable checklist.",
+        );
         return;
     }
 
@@ -751,7 +797,11 @@ fn refresh_routine_list(
             schedule_label(routine.schedule),
             routine.step_count,
             routine.start_date,
-            routine.end_date.as_ref().map(|end| format!(" · ends {end}")).unwrap_or_default()
+            routine
+                .end_date
+                .as_ref()
+                .map(|end| format!(" · ends {end}"))
+                .unwrap_or_default()
         )));
         detail.set_xalign(0.0);
         detail.add_css_class("dim-label");
@@ -761,7 +811,11 @@ fn refresh_routine_list(
         let edit = gtk::Button::with_label("Edit");
         let run = gtk::Button::with_label("Run today");
         let history = gtk::Button::with_label("History");
-        let toggle = gtk::Button::with_label(if routine.status == "paused" { "Resume" } else { "Pause" });
+        let toggle = gtk::Button::with_label(if routine.status == "paused" {
+            "Resume"
+        } else {
+            "Pause"
+        });
         let archive = gtk::Button::with_label("Archive");
         run.set_sensitive(routine.status == "active");
         for button in [&edit, &run, &history, &toggle, &archive] {
@@ -829,7 +883,11 @@ fn refresh_routine_list(
         let toggle_list = list.clone();
         let toggle_parent = parent.clone();
         toggle.connect_clicked(move |_| {
-            let next = if toggle_status == "paused" { "active" } else { "paused" };
+            let next = if toggle_status == "paused" {
+                "active"
+            } else {
+                "paused"
+            };
             if let Err(error) = set_routine_status(&toggle_connection.borrow(), toggle_id, next) {
                 eprintln!("Could not update routine status: {error}");
             }
@@ -841,7 +899,9 @@ fn refresh_routine_list(
         let archive_list = list.clone();
         let archive_parent = parent.clone();
         archive.connect_clicked(move |_| {
-            if let Err(error) = set_routine_status(&archive_connection.borrow(), archive_id, "archived") {
+            if let Err(error) =
+                set_routine_status(&archive_connection.borrow(), archive_id, "archived")
+            {
                 eprintln!("Could not archive routine: {error}");
             }
             refresh_routine_list(&archive_parent, &archive_list, &archive_connection);
@@ -860,17 +920,27 @@ fn show_editor(
     let routine = existing.as_ref().map(|value| value.routine.clone());
     let initial_steps = existing
         .as_ref()
-        .map(|value| value.steps.iter().map(|step| NewRoutineStep {
-            title: step.title.clone(),
-            details: step.details.clone(),
-            kind: step.kind.clone(),
-            required: step.required,
-        }).collect())
+        .map(|value| {
+            value
+                .steps
+                .iter()
+                .map(|step| NewRoutineStep {
+                    title: step.title.clone(),
+                    details: step.details.clone(),
+                    kind: step.kind.clone(),
+                    required: step.required,
+                })
+                .collect()
+        })
         .unwrap_or_else(Vec::new);
     let drafts = Rc::new(RefCell::new(initial_steps));
 
     let editor = gtk::Window::builder()
-        .title(if editing { "Edit routine" } else { "Create routine" })
+        .title(if editing {
+            "Edit routine"
+        } else {
+            "Create routine"
+        })
         .transient_for(parent)
         .modal(true)
         .default_width(720)
@@ -902,7 +972,13 @@ fn show_editor(
     schedule_label.set_xalign(0.0);
     let schedule_picker = gtk::DropDown::from_strings(&["Every day", "Selected weekdays"]);
     let existing_schedule = routine.as_ref().map(|value| value.schedule);
-    schedule_picker.set_selected(if matches!(existing_schedule, Some(RoutineSchedule::Weekdays { .. })) { 1 } else { 0 });
+    schedule_picker.set_selected(
+        if matches!(existing_schedule, Some(RoutineSchedule::Weekdays { .. })) {
+            1
+        } else {
+            0
+        },
+    );
     schedule_row.append(&schedule_label);
     schedule_row.append(&schedule_picker);
 
@@ -924,7 +1000,12 @@ fn show_editor(
     let date_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let start_date = gtk::Entry::new();
     start_date.set_placeholder_text(Some("Start date (YYYY-MM-DD)"));
-    start_date.set_text(routine.as_ref().map(|value| value.start_date.as_str()).unwrap_or(&current_date));
+    start_date.set_text(
+        routine
+            .as_ref()
+            .map(|value| value.start_date.as_str())
+            .unwrap_or(&current_date),
+    );
     start_date.set_hexpand(true);
     let end_date = gtk::Entry::new();
     end_date.set_placeholder_text(Some("Optional end date"));
@@ -947,7 +1028,8 @@ fn show_editor(
     let habits = list_linkable_habits(&connection.borrow()).unwrap_or_default();
     let mut habit_options = vec!["Action (not linked to a habit)".to_string()];
     habit_options.extend(habits.iter().map(|habit| format!("Habit: {}", habit.name)));
-    let habit_picker = gtk::DropDown::from_strings(&habit_options.iter().map(String::as_str).collect::<Vec<_>>());
+    let habit_picker =
+        gtk::DropDown::from_strings(&habit_options.iter().map(String::as_str).collect::<Vec<_>>());
     let add_step = gtk::Button::with_label("Add step");
     step_add_row.append(&step_title);
     step_add_row.append(&habit_picker);
@@ -967,7 +1049,11 @@ fn show_editor(
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     actions.set_halign(gtk::Align::End);
     let cancel = gtk::Button::with_label("Cancel");
-    let save = gtk::Button::with_label(if editing { "Save changes" } else { "Create routine" });
+    let save = gtk::Button::with_label(if editing {
+        "Save changes"
+    } else {
+        "Create routine"
+    });
     save.add_css_class("suggested-action");
     actions.append(&cancel);
     actions.append(&save);
@@ -1081,7 +1167,10 @@ fn render_step_drafts(list: &gtk::Box, drafts: Rc<RefCell<Vec<NewRoutineStep>>>)
         list.remove(&child);
     }
     if drafts.borrow().is_empty() {
-        append_message(list, "No steps yet. Add an action or link an existing habit.");
+        append_message(
+            list,
+            "No steps yet. Add an action or link an existing habit.",
+        );
         return;
     }
     let count = drafts.borrow().len();
@@ -1212,16 +1301,32 @@ fn populate_run_view(
             return;
         }
     };
-    let completed = run.items.iter().filter(|item| item.status == "completed").count();
-    let skipped = run.items.iter().filter(|item| item.status == "skipped").count();
-    let pending = run.items.iter().filter(|item| item.status == "pending").count();
+    let completed = run
+        .items
+        .iter()
+        .filter(|item| item.status == "completed")
+        .count();
+    let skipped = run
+        .items
+        .iter()
+        .filter(|item| item.status == "skipped")
+        .count();
+    let pending = run
+        .items
+        .iter()
+        .filter(|item| item.status == "pending")
+        .count();
     summary.set_text(&format!(
         "{} · {} completed · {} skipped · {} pending{}",
         run.status,
         completed,
         skipped,
         pending,
-        if run.completed_at.is_some() { " · finished" } else { "" }
+        if run.completed_at.is_some() {
+            " · finished"
+        } else {
+            ""
+        }
     ));
 
     for item in run.items {
@@ -1238,7 +1343,11 @@ fn populate_run_view(
         let check_summary = summary.clone();
         let check_box = items_box.clone();
         check.connect_toggled(move |button| {
-            let status = if button.is_active() { "completed" } else { "pending" };
+            let status = if button.is_active() {
+                "completed"
+            } else {
+                "pending"
+            };
             if let Err(error) = set_run_step_status(
                 &check_connection.borrow(),
                 run_id_for_check,
@@ -1247,9 +1356,18 @@ fn populate_run_view(
             ) {
                 eprintln!("Could not update routine step: {error}");
             }
-            populate_run_view(&check_connection, run_id_for_check, &check_summary, &check_box);
+            populate_run_view(
+                &check_connection,
+                run_id_for_check,
+                &check_summary,
+                &check_box,
+            );
         });
-        let skip = gtk::Button::with_label(if item.status == "skipped" { "Undo skip" } else { "Skip" });
+        let skip = gtk::Button::with_label(if item.status == "skipped" {
+            "Undo skip"
+        } else {
+            "Skip"
+        });
         let skip_id = item.step_id;
         let skip_status = item.status.clone();
         let skip_connection = Rc::clone(connection);
@@ -1257,13 +1375,14 @@ fn populate_run_view(
         let skip_box = items_box.clone();
         let skip_run = run.id;
         skip.connect_clicked(move |_| {
-            let status = if skip_status == "skipped" { "pending" } else { "skipped" };
-            if let Err(error) = set_run_step_status(
-                &skip_connection.borrow(),
-                skip_run,
-                skip_id,
-                status,
-            ) {
+            let status = if skip_status == "skipped" {
+                "pending"
+            } else {
+                "skipped"
+            };
+            if let Err(error) =
+                set_run_step_status(&skip_connection.borrow(), skip_run, skip_id, status)
+            {
                 eprintln!("Could not skip routine step: {error}");
             }
             populate_run_view(&skip_connection, skip_run, &skip_summary, &skip_box);
@@ -1397,20 +1516,32 @@ mod tests {
         let loaded = load_routine(&connection, id).expect("load routine");
         assert_eq!(loaded.steps[0].title, "Drink water");
         assert_eq!(loaded.steps[1].sort_order, 1);
-        assert_eq!(list_routines(&connection, false).expect("list routines").len(), 1);
+        assert_eq!(
+            list_routines(&connection, false)
+                .expect("list routines")
+                .len(),
+            1
+        );
 
         update_routine(
             &connection,
             id,
-            &draft(RoutineSchedule::Weekdays { weekday_mask: 0b001_1111 }, vec![
-                action("Plan the day", true),
-                action("Drink water", true),
-            ]),
+            &draft(
+                RoutineSchedule::Weekdays {
+                    weekday_mask: 0b001_1111,
+                },
+                vec![action("Plan the day", true), action("Drink water", true)],
+            ),
         )
         .expect("update routine");
         let updated = load_routine(&connection, id).expect("reload routine");
         assert_eq!(updated.steps[0].title, "Plan the day");
-        assert_eq!(updated.routine.schedule, RoutineSchedule::Weekdays { weekday_mask: 0b001_1111 });
+        assert_eq!(
+            updated.routine.schedule,
+            RoutineSchedule::Weekdays {
+                weekday_mask: 0b001_1111
+            }
+        );
     }
 
     #[test]
@@ -1418,7 +1549,12 @@ mod tests {
         let connection = memory_connection();
         let id = create_routine(
             &connection,
-            &draft(RoutineSchedule::Weekdays { weekday_mask: 0b000_0010 }, vec![action("Read", true)]),
+            &draft(
+                RoutineSchedule::Weekdays {
+                    weekday_mask: 0b000_0010,
+                },
+                vec![action("Read", true)],
+            ),
         )
         .expect("create weekday routine");
         assert!(start_run(&connection, id, "2026-11-02").is_ok()); // Monday
@@ -1485,22 +1621,32 @@ mod tests {
         };
         let routine_id = create_routine(&connection, &draft(RoutineSchedule::Daily, vec![linked]))
             .expect("link active habit");
-        assert_eq!(load_routine(&connection, routine_id).unwrap().steps.len(), 1);
-        connection.execute("UPDATE habits SET archived_at = '2026-11-14' WHERE id = ?1", [id])
-            .expect("archive habit");
-        assert!(update_routine(
-            &connection,
-            routine_id,
-            &draft(
-                RoutineSchedule::Daily,
-                vec![NewRoutineStep {
-                    title: "Read".to_string(),
-                    details: String::new(),
-                    kind: RoutineStepKind::Habit { habit_id: 999 },
-                    required: true,
-                }]
+        assert_eq!(
+            load_routine(&connection, routine_id).unwrap().steps.len(),
+            1
+        );
+        connection
+            .execute(
+                "UPDATE habits SET archived_at = '2026-11-14' WHERE id = ?1",
+                [id],
             )
-        ).is_err());
+            .expect("archive habit");
+        assert!(
+            update_routine(
+                &connection,
+                routine_id,
+                &draft(
+                    RoutineSchedule::Daily,
+                    vec![NewRoutineStep {
+                        title: "Read".to_string(),
+                        details: String::new(),
+                        kind: RoutineStepKind::Habit { habit_id: 999 },
+                        required: true,
+                    }]
+                )
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1509,7 +1655,10 @@ mod tests {
         let mut invalid = draft(RoutineSchedule::Daily, vec![action("Read", true)]);
         invalid.start_date = "2027-02-29".to_string();
         assert!(create_routine(&connection, &invalid).is_err());
-        let invalid_mask = draft(RoutineSchedule::Weekdays { weekday_mask: 0 }, vec![action("Read", true)]);
+        let invalid_mask = draft(
+            RoutineSchedule::Weekdays { weekday_mask: 0 },
+            vec![action("Read", true)],
+        );
         assert!(create_routine(&connection, &invalid_mask).is_err());
         let optional_only = draft(RoutineSchedule::Daily, vec![action("Optional", false)]);
         assert!(create_routine(&connection, &optional_only).is_err());
@@ -1518,8 +1667,11 @@ mod tests {
     #[test]
     fn archived_routines_are_hidden_from_default_list_but_can_be_restored() {
         let connection = memory_connection();
-        let id = create_routine(&connection, &draft(RoutineSchedule::Daily, vec![action("Read", true)]))
-            .expect("create routine");
+        let id = create_routine(
+            &connection,
+            &draft(RoutineSchedule::Daily, vec![action("Read", true)]),
+        )
+        .expect("create routine");
         set_routine_status(&connection, id, "archived").expect("archive");
         assert!(list_routines(&connection, false).unwrap().is_empty());
         assert_eq!(list_routines(&connection, true).unwrap().len(), 1);
