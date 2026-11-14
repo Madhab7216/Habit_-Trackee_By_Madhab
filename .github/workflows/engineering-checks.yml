@@ -2,9 +2,9 @@ name: Engineering checks
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "work/m5-goals-milestones"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "work/linux-mint-habit-tracker-foundation"]
   workflow_dispatch:
 
 permissions:
