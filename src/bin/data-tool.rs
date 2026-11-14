@@ -2,6 +2,8 @@
 pub mod db;
 #[path = "../domain.rs"]
 pub mod domain;
+#[path = "../routines.rs"]
+pub mod routines;
 #[path = "../portability.rs"]
 pub mod portability;
 
