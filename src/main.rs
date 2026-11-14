@@ -1,7 +1,6 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
-pub mod scoring;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
@@ -65,13 +64,6 @@ fn build_ui(application: &Application) {
     });
     header.pack_end(&goals_button);
 
-    let scores_button = Button::with_label("Progress & scores");
-    let scores_parent = window.clone();
-    let scores_connection = Rc::clone(&state.connection);
-    scores_button.connect_clicked(move |_| {
-        show_scores_window(&scores_parent, Rc::clone(&scores_connection));
-    });
-    header.pack_end(&scores_button);
     window.set_titlebar(Some(&header));
 
     let page = gtk::Box::new(Orientation::Vertical, 14);
@@ -88,6 +80,13 @@ fn build_ui(application: &Application) {
     ));
     subtitle.add_css_class("dim-label");
     subtitle.set_xalign(0.0);
+
+    let scores_button = Button::with_label("Progress & scores");
+    let scores_parent = window.clone();
+    let scores_connection = Rc::clone(&state.connection);
+    scores_button.connect_clicked(move |_| {
+        show_scores_window(&scores_parent, Rc::clone(&scores_connection));
+    });
 
     let form = gtk::Box::new(Orientation::Horizontal, 8);
     let habit_entry = Entry::new();
@@ -127,6 +126,7 @@ fn build_ui(application: &Application) {
 
     page.append(&title);
     page.append(&subtitle);
+    page.append(&scores_button);
     page.append(&form);
     page.append(&scroller);
     page.append(&footer);
@@ -190,6 +190,8 @@ fn build_ui(application: &Application) {
     refresh_list(&list, &state, &window, false);
     window.present();
 }
+
+pub mod scoring;
 
 fn show_scores_window(parent: &ApplicationWindow, connection: Rc<RefCell<rusqlite::Connection>>) {
     let window = gtk::Window::builder()
