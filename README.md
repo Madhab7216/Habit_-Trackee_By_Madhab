@@ -1,75 +1,103 @@
 # Habit Trackers by Madhab
 
-A privacy-first, offline-first habit and personal-goal tracker for Linux Mint. The product is being built as a native Rust + GTK 4 desktop application with Bengali and English interfaces, flexible habit schedules, measurable goals, transparent progress scoring and user-owned data.
+A privacy-first, offline-first native habit and personal productivity app for Linux Mint. Built with **Rust, GTK 4 and SQLite**. Personal records stay on the device; the MVP does not require an account, cloud sync, telemetry, ads or remote AI.
 
-> **Development status — 14 November 2026:** the application is under active development on a feature branch. The basic Today workflow and a first pause/resume slice exist, but this is not yet a complete app or a verified Linux Mint release.
+> **Engineering preview (14 November 2026):** M2 foundation with M3 schedule-aware habit workflows, M5 Goals & Milestones, and M6 local data portability on the feature branch. This is not a stable v1.0 release.
 
 ## Product decisions
 
-- **Platform:** Linux Mint desktop first.
-- **Design:** modern hybrid native desktop UI.
-- **Languages:** Bengali and English; localization work remains.
-- **Scoring:** show adherence, habit-strength estimate and streak separately.
-- **Storage:** local-first SQLite; no cloud account or network dependency for core tracking.
-- **Privacy:** no telemetry or remote AI in the MVP.
+- **First platform:** Linux Mint desktop.
+- **Interface:** native GTK 4; focused Today view plus deeper management and goals.
+- **Languages:** Bengali and English are planned; complete localization remains outstanding.
+- **Storage:** local-first SQLite, versioned migrations and user-controlled data.
+- **Scoring:** transparent adherence, habit-strength estimate and current streak, displayed separately.
+- **Privacy:** no background upload or telemetry.
 
-## Implemented prototype
+## Current feature-branch capabilities
 
-The current feature branch includes:
+### Habit workflows (M2–M4 foundation)
+- Add daily binary habits.
+- Select a recurrence: every day, Monday–Friday, every two days, or a weekly frequency target (1–7 sessions).
+- Mark a binary habit done/undo and intentionally skip an eligible date.
+- View scheduled, not-scheduled, completed, skipped and paused states.
+- Edit a habit name, pause/resume, archive with confirmation and restore it without deleting history.
+- Date and schedule rules are enforced in the data layer, not only by disabled UI controls.
+- The domain layer includes higher-is-better/at-least and lower-is-better/at-most measurement normalization and separate adherence, EMA habit-strength and streak metrics.
 
-- GTK 4 Today screen.
-- Add a daily binary habit.
-- Mark today's habit complete and undo it.
-- Rename active habits without changing history.
-- Archive and restore habits from a dedicated Archived view; archival preserves check-ins and pause history.
-- Pause and resume a habit; retain pause history in SQLite.
-- Prevent check-ins while a habit is paused.
-- Versioned SQLite schema migrations (v1 and v2).
-- Pure Rust date, schedule and scoring primitives.
-- Python SQLite schema tests, Rust tests and GitHub Actions checks.
-- Read-only Linux Mint environment audit script.
+### Goals and milestones (M5)
+- Create, edit, pause/resume, complete, archive and restore goals.
+- Add dated or undated milestones.
+- Complete, reopen or skip milestones.
+- See milestone progress and habit links.
+- Skipped milestones are excluded from the progress denominator and displayed separately.
+- Existing goal and habit-link records are preserved by an additive milestone migration.
 
-The current UI still creates daily binary habits only. The pure schedule/scoring engine is not yet integrated into the GTK forms, persisted schedule evaluation or analytics.
+### Local data portability (M6)
+Build the companion CLI with the application:
 
-## Roadmap
+```bash
+cargo run --bin madhab-data-tool -- backup "$HOME/Documents/madhab-habits-backup.sqlite3"
+cargo run --bin madhab-data-tool -- verify "$HOME/Documents/madhab-habits-backup.sqlite3"
+cargo run --bin madhab-data-tool -- restore   "$HOME/Documents/madhab-habits-backup.sqlite3"   "$HOME/Documents/madhab-habits-restored.sqlite3"
+cargo run --bin madhab-data-tool -- export-csv "$HOME/Documents/Madhab-Habit-Export"
+```
 
-1. **M3 — Habit management:** active-habit rename and reversible archive/restore are implemented in the foundation branch; numeric/count/duration/limit/frequency forms, flexible schedules and distinct daily states remain.
-2. **M4 — Scoring:** integrate adherence, habit strength and streaks with persisted, versioned history.
-3. **M5 — Productivity:** calendar, heatmap, summaries, goals, routines, reviews and reminders.
-4. **M6 — Trust and accessibility:** Bengali/English gettext, keyboard and screen-reader review, CSV export, consistent backup/restore and privacy hardening.
-5. **M7 — Release:** validate on a real supported Linux Mint machine, then package and test install/update/uninstall.
+Backup uses SQLite's online backup API and integrity/foreign-key checks. Restore always writes a separate new database; it never replaces the active database. CSV export writes a consistent snapshot of the supported user-data tables. Explicit destinations must not already exist. All operations are local.
 
-See [Engineering Status](docs/ENGINEERING_STATUS.md), [Engineering Blueprint](docs/ENGINEERING_BLUEPRINT.md) and [M2 Prototype Scope](docs/M2_PROTOTYPE.md) for detailed acceptance criteria and validation boundaries.
+## Linux Mint build
 
-## Build on Linux Mint
+Install build prerequisites and GTK 4 development files:
 
-Install GTK 4 development prerequisites and the pinned Rust toolchain specified in `rust-toolchain.toml`, then run:
+```bash
+sudo apt update
+sudo apt install build-essential pkg-config libgtk-4-dev
+```
 
-~~~bash
+The Rust toolchain is pinned in `rust-toolchain.toml`. Run the read-only environment audit:
+
+```bash
+bash scripts/audit-linux-mint.sh
+```
+
+Then build, test, lint and launch:
+
+```bash
 cargo fmt --all -- --check
 cargo check --all-targets
 cargo test --all-targets
 cargo clippy --all-targets -- -D warnings
 cargo run
-~~~
+```
 
-Run the read-only environment audit:
+The audit script does not install packages, invoke sudo, modify system settings or access the network.
 
-~~~bash
-bash scripts/audit-linux-mint.sh | tee madhab-habit-environment-audit.txt
-~~~
+## Local data and safety
 
-The audit script does not install packages or change system settings. Review its output and remove personal/home-path details before sharing it.
+The application database is stored at:
 
-## Tests
+`$XDG_DATA_HOME/madhab-habit-tracker/habit-tracker.sqlite3`
 
-~~~bash
-python3 -m unittest discover -s tests -p 'test_*.py' -v
-bash -n scripts/audit-linux-mint.sh
-~~~
+Fallback:
 
-## Contribution and license
+`~/.local/share/madhab-habit-tracker/habit-tracker.sqlite3`
 
-The current implementation is on [Draft PR #1](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1). It must remain draft until current CI and target-machine validation are complete.
+If neither path is an absolute usable location, the app refuses to place personal data in the current working directory. Backup and CSV outputs may contain intimate habit names and notes; keep them private and do not commit them.
 
-No license has been selected. Do not assume public visibility means permission to reuse or redistribute code. A license decision is required before inviting external contributions.
+## Engineering notes
+
+- [Engineering blueprint](docs/ENGINEERING_BLUEPRINT.md)
+- [Engineering status and release blockers](docs/ENGINEERING_STATUS.md)
+- [M3 schedule integration](docs/M3_SCHEDULE_INTEGRATION.md)
+- [Goals and milestones](docs/M5_GOALS_MILESTONES.md)
+- [Scoring policy](docs/SCORING_POLICY.md)
+- [Data portability](docs/DATA_PORTABILITY.md)
+
+## Release blockers
+
+- Fresh GitHub Actions run must pass on the latest pull-request head.
+- Launch and exercise the app on the actual supported Linux Mint workstation; CI compile is not a substitute.
+- Complete Bengali/English localization, keyboard/screen-reader accessibility, timezone/DST behavior and packaging.
+- Add effective-dated schedule history or explicit confirmation before schedule edits change historical scoring.
+- Choose and add an explicit open-source license before accepting external contributions.
+
+The primary feature branch is tracked by open Draft PR #1. It has not been merged into `main`.

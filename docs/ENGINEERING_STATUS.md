@@ -2,93 +2,79 @@
 
 Audit date: 2026-11-14
 
-## Live GitHub state
+## Repository state
 
 - Repository: `Madhab7216/Habit_-Trackee_By_Madhab`
-- Default branch: `main`; it remains the original README-only baseline.
-- Active implementation branch: `work/linux-mint-habit-tracker-foundation`
-- Pull request: [#1 — GTK4 habit tracker foundation](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1) — open, draft, not merged. New M3 lifecycle commits continue on the same isolated feature branch; `main` remains unchanged.
-- [Issue #2](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/2): target Linux Mint workstation validation — open.
-- [Issue #3](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/3): remaining advanced workflows — open.
+- Default branch: `main`; kept unchanged.
+- Primary implementation branch: `work/linux-mint-habit-tracker-foundation`
+- Primary pull request: [#1 — M0–M3 foundation: GTK4 habit tracker, scheduling, scoring and pause/resume](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/pull/1), open and draft.
+- Stacked work branches/PRs for M3, M5 and M6 have their own history; their implementation is being consolidated into PR #1. No side branch has been deleted or force-pushed.
+- Target-machine validation issue: [#2 — validate on the target Linux Mint workstation](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/issues/2).
 
-Keep PR #1 in draft. Do not merge until the latest Rust checks and the actual Linux Mint workstation validation pass.
+## Implemented in the current feature increment
 
-## Implemented and present in the feature branch
+### M2 — native foundation
+- Rust + GTK 4 application and local SQLite repository.
+- Versioned schema (v1 base, v2 pause-period migration).
+- Foreign keys, indexes, unique habit/date entries and constrained status/type values.
+- Local data directory via absolute XDG/HOME resolution.
+- Read-only Linux Mint environment audit.
+- GitHub Actions for format, compilation, Rust tests, Clippy, schema tests and shell syntax.
 
-- Native Rust + GTK 4 Linux desktop starter.
-- Local SQLite persistence under the user's XDG data directory / home data directory.
-- Versioned migrations: initial schema (v1) and pause-period history (v2).
-- Initial habit types and schedule fields in the schema: binary, numeric, duration, count, limit and frequency; daily, selected weekdays, every-N-days and times-per-week.
-- Pure Rust domain rules for civil dates, schedule evaluation, adherence, EMA habit-strength estimate and streak calculation.
-- Today screen: add a daily binary habit, rename it, mark complete, undo, pause, resume, archive and restore it from a dedicated Archived view.
-- Reversible archive and restore operations preserve existing check-ins and pause history; database tests cover rename, archive/restore, and archived check-in protection.
-- Pause history is retained; only one open pause per habit is allowed; check-ins are blocked while paused.
-- Unit and schema tests, GitHub Actions workflow, and read-only Linux Mint environment audit script.
-- Product blueprint, scope decisions and prototype-boundary documentation.
+### M3 — schedule-aware habits
+- Persisted daily, selected-weekday, every-N-days and weekly-frequency cadence.
+- Today view can distinguish scheduled/not-scheduled, completed, paused, partial and skipped items.
+- Binary completion/undo and explicit skip actions.
+- Database validation rejects invalid check-ins for archived, paused or unscheduled dates.
+- Pause/resume history is retained; pause start is inclusive and resume date exclusive.
+- Habit rename/edit, archive with history preservation and restore.
+- Weekly frequency quota is bounded to 1–7 sessions; same-day frequency check-ins accumulate.
 
-## Important boundary: implemented is not the same as integrated
+### M4 — scoring foundation
+- Deterministic Gregorian civil date and schedule-period handling.
+- At-least and at-most measurement ratio functions.
+- Adherence, EMA habit-strength estimate and current streak as distinct measures.
+- Closed missed periods contribute zero; skipped and fully paused periods are excluded.
+- An open current day/week is not counted as missed early.
+- Weekly frequency targets are prorated when some days of that week are paused.
+- Full behavior contract in [SCORING_POLICY.md](SCORING_POLICY.md).
 
-The schedule/scoring engine is not yet wired into the Today screen, habit forms, persisted check-ins or analytics. The UI still creates daily binary habits only. Numeric/duration/count/limit/frequency tracking, partial/skipped entry forms and full schedule editing are not complete. Habit rename and reversible archive/restore are now implemented; permanent deletion remains intentionally deferred so history cannot be erased accidentally.
+### M5 — Goals & Milestones
+- Additive goal-milestone table migration; existing goals and habit links remain.
+- Goal create/edit/pause/resume/complete/archive/restore workflows.
+- Milestone create, complete, reopen and skip workflows.
+- Progress uses completed milestones divided by non-skipped milestones; skipped count remains visible.
+- Separate goal migration ledger avoids collision with the habit schema version.
 
-The current pause/resume implementation is a first M3 slice, not a finished habit-management system.
+### M6 — local data portability
+- CLI commands for verified SQLite backup, backup verification, separate-file restore and CSV bundle export.
+- Online SQLite backup API, integrity and foreign-key checks.
+- Explicit destination paths; existing files/directories are never overwritten.
+- Unix backup/output permissions are owner-only.
+- Restore never replaces the live app database.
+- Export is a read-transaction snapshot and includes the milestones table when present.
 
-## CI status
+## Validation boundary
 
-Latest completed validation: [GitHub Actions run #32](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions/runs/43595801293), on feature-branch head `94e15ddbbd7acc7fc6a8aad93a2732f8be4bb3d3` — all jobs passed:
-- `cargo fmt --all -- --check`: passed.
-- `cargo check --all-targets`: passed.
-- `cargo test --all-targets`: passed, including the added lifecycle regression tests.
-- `cargo clippy --all-targets -- -D warnings`: passed.
-- Python SQLite schema tests: passed.
-- `bash -n scripts/audit-linux-mint.sh`: passed.
+Earlier M3 and M5 workflow runs passed all relevant engineering checks on their own branch heads. M6's first dedicated run failed only the formatting gate for one import layout in `src/portability.rs`; that formatting delta has been corrected in the consolidation blob.
 
-This is hosted Ubuntu 24.04 CI evidence, not a substitute for the actual target Linux Mint workstation launch/persistence smoke test in Issue #2. The branch must be revalidated after any later code change.
+A new CI run must complete on the exact latest PR #1 head before the combined increment is described as CI-green. The actual GTK application still needs to be launched and exercised on the target Linux Mint workstation (Issue #2).
 
-## Remaining engineering work
+## Remaining v1.0 blockers
 
-### M3 — Complete habit management and measurement
-1. Active-habit rename and reversible archive/restore are implemented. Permanent deletion remains deferred; any future deletion must include an explicit export/confirmation policy.
-2. Binary, numeric/count, duration, limit/avoid and frequency-goal check-ins with unit and direction validation.
-3. Connect stored schedule definitions to `domain.rs`; derive due/unscheduled states correctly.
-4. Distinguish completed, partial, skipped, missed, paused and not-scheduled periods.
-5. Add migration and integration tests for every workflow.
+1. Verify newest-head GitHub Actions results.
+2. Complete target Linux Mint install/build/launch and upgrade tests.
+3. Add a full schedule editor and effective-date versioning/confirmation so schedule changes do not silently reinterpret past periods.
+4. Finish Bengali/English localization and keyboard/screen-reader accessibility.
+5. Add goal-to-task/routine workflows, weekly reviews and richer calendar analytics.
+6. Add a GTK export/backup dialog, retention guidance and recovery UX around the CLI.
+7. Implement IANA timezone selection and DST/travel-safe scheduling.
+8. Test package installation, updates and uninstall.
+9. Choose and add an explicit open-source license before accepting outside contributions.
 
-### M4 — Scoring integration
-1. Feed persisted eligible periods to the scoring engine.
-2. Show adherence, habit-strength estimate and streak separately, with clear explanations.
-3. Version scoring and test deterministic history replay, schedule changes and pauses.
-4. Ensure lower-is-better limit habits never reward higher consumption.
+## Privacy boundaries
 
-### M5 — Productivity and analytics
-- Calendar / heatmap, 7-day and monthly summaries, trends and target progress.
-- Link habits to long-term goals; add routines, milestones and review notes.
-- User-controlled reminders, quiet hours and notification preferences.
-
-### M6 — Data ownership, privacy, localization and accessibility
-- Bengali and English gettext catalogs for every shipped screen.
-- Keyboard navigation, accessible names, focus order, scalable text, contrast and screen-reader review.
-- User-initiated CSV export and consistent SQLite backup/restore.
-- Protect local data and keep habit names/notes out of logs. No telemetry or cloud requirement for core tracking.
-
-### M7 — Release engineering
-- Read-only audit and build/launch/persistence smoke test on the actual supported Linux Mint machine (Issue #2).
-- Package, install, update and uninstall verification; document supported Linux Mint versions.
-- Add dependency/security review and release checklist.
-- Select and add a license before accepting outside contributions.
-
-## Product research baseline
-
-- [Loop Habit Tracker](https://github.com/iSoron/uhabits): a strong open-source reference for flexible schedules, reminders, widgets, history, CSV/SQLite export and offline privacy.
-- [OpenHabitTracker](https://openhabittracker.net/): a useful reference for calendar/history/statistical charts, target progress and daily summary reminders.
-- [GTK 4 accessibility guidance](https://docs.gtk.org/gtk4/section-accessibility.html): prefer accessible GTK widgets and provide labels/descriptions for custom UI.
-- [GTK Rust book](https://gtk-rs.org/gtk4-rs/stable/latest/book/): use gettext-based localization for Bengali and English.
-- [SQLite Online Backup API](https://sqlite.org/backup.html): use a consistent database snapshot rather than copying a live SQLite file.
-- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/): keep user data in an absolute XDG data directory (default `$HOME/.local/share`).
-
-## Privacy and safety boundaries
-
-- This app is separate from Madhab OS.
-- MVP core functions stay offline and local-only; no remote AI, cloud sync or telemetry.
-- Habit labels, notes and history can be sensitive. Never upload the user's live database or real habit history into issues, PR comments or CI artifacts.
-- Do not merge into `main` based only on schema-test success.
-- The repository has no selected license. Public visibility alone does not grant permission to reuse or redistribute the code.
+- Separate from Madhab OS.
+- Core use is local and offline. No telemetry, cloud sync or remote AI is included.
+- Habit names and notes may be sensitive. Do not attach live SQLite files or personal records to public issues/PRs.
+- PR #1 remains draft until current CI and target-machine validation are reviewed.

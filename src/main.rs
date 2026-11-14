@@ -1,4 +1,5 @@
 mod db;
+mod goals;
 pub mod domain;
 
 use gtk::prelude::*;
@@ -14,7 +15,7 @@ use std::{
 const APP_ID: &str = "org.madhab.habittracker";
 
 struct AppState {
-    connection: RefCell<rusqlite::Connection>,
+    connection: Rc<RefCell<rusqlite::Connection>>,
 }
 
 fn main() {
@@ -43,7 +44,7 @@ fn build_ui(application: &Application) {
     };
 
     let state = Rc::new(AppState {
-        connection: RefCell::new(connection),
+        connection: Rc::new(RefCell::new(connection)),
     });
     let window = ApplicationWindow::builder()
         .application(application)
@@ -54,6 +55,13 @@ fn build_ui(application: &Application) {
 
     let header = HeaderBar::new();
     header.set_title_widget(Some(&Label::new(Some("Madhab Habit Tracker"))));
+    let goals_button = Button::with_label("Goals & milestones");
+    let goals_parent = window.clone();
+    let goals_connection = Rc::clone(&state.connection);
+    goals_button.connect_clicked(move |_| {
+        goals::open_window(&goals_parent, Rc::clone(&goals_connection));
+    });
+    header.pack_end(&goals_button);
     window.set_titlebar(Some(&header));
 
     let page = gtk::Box::new(Orientation::Vertical, 14);
@@ -73,12 +81,24 @@ fn build_ui(application: &Application) {
 
     let form = gtk::Box::new(Orientation::Horizontal, 8);
     let habit_entry = Entry::new();
-    habit_entry.set_placeholder_text(Some("Add a daily habit…"));
+    habit_entry.set_placeholder_text(Some("Add a habit…"));
     habit_entry.set_hexpand(true);
+    let schedule_picker = gtk::DropDown::from_strings(&[
+        "Every day",
+        "Monday to Friday",
+        "Every 2 days",
+        "Times per week",
+    ]);
+    schedule_picker.set_selected(0);
+    let weekly_target = gtk::SpinButton::with_range(1.0, 7.0, 1.0);
+    weekly_target.set_value(3.0);
+    weekly_target.set_tooltip_text(Some("Weekly session target (1–7), used for Times per week"));
     let add_button = Button::with_label("Add habit");
     add_button.add_css_class("suggested-action");
     let archive_view_button = Button::with_label("View archived");
     form.append(&habit_entry);
+    form.append(&schedule_picker);
+    form.append(&weekly_target);
     form.append(&add_button);
     form.append(&archive_view_button);
 
@@ -108,13 +128,27 @@ fn build_ui(application: &Application) {
     let add_entry = habit_entry.clone();
     let add_parent = window.clone();
     let add_mode = Rc::clone(&archived_mode);
+    let add_schedule = schedule_picker.clone();
+    let add_weekly_target = weekly_target.clone();
     let archive_button_for_add = archive_view_button.clone();
     add_button.connect_clicked(move |_| {
         let name = add_entry.text().trim().to_string();
         if name.is_empty() {
             return;
         }
-        match db::create_habit(&add_state.connection.borrow(), &name) {
+        let cadence = match add_schedule.selected() {
+            0 => Cadence::Daily,
+            1 => Cadence::Weekdays { weekday_mask: 0b001_1111 },
+            2 => Cadence::EveryNDays { interval: 2 },
+            3 => Cadence::TimesPerWeek {
+                target: add_weekly_target.value().round().clamp(1.0, 7.0) as u8,
+            },
+            _ => {
+                eprintln!("Select a valid habit schedule.");
+                return;
+            }
+        };
+        match db::create_habit_with_cadence(&add_state.connection.borrow(), &name, cadence) {
             Ok(()) => {
                 add_entry.set_text("");
                 add_mode.set(false);
@@ -215,6 +249,8 @@ fn refresh_list(
                 "Paused"
             } else if habit.completed {
                 "Completed"
+            } else if !habit.scheduled {
+                "Not scheduled"
             } else {
                 "Due today"
             }));
@@ -237,7 +273,7 @@ fn refresh_list(
             });
 
             let action = Button::with_label(if habit.completed { "Undo" } else { "Mark done" });
-            action.set_sensitive(!habit.paused);
+            action.set_sensitive(habit.completed || (!habit.paused && habit.scheduled));
             let action_state = Rc::clone(state);
             let action_list = list.clone();
             let action_parent = parent.clone();

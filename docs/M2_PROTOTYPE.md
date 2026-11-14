@@ -1,21 +1,40 @@
-# M2 starter implementation — prototype scope
+# Engineering implementation and validation boundary — M2 to M6
 
-## Included in this slice
-- Native GTK 4 application window with a minimal Today view.
-- Add a basic daily binary habit.
-- Mark today's habit complete and undo that action.
-- Local SQLite file under `$XDG_DATA_HOME/madhab-habit-tracker/` or `$HOME/.local/share/madhab-habit-tracker/`.
-- Transactional initial schema version and foreign-key enforcement.
-- SQLite constraints, indexes, and a dependency-free Python schema test suite.
+## M2 — native foundation
+- Rust + GTK 4 desktop app.
+- Local SQLite with v1 base schema and v2 pause-period migration.
+- Foreign keys, indexes, unique daily entries and data constraints.
+- Absolute XDG/HOME data-directory checks.
+- Read-only Linux Mint hardware/toolchain audit.
 
-## Deliberately not implemented yet
-- Bengali/English gettext integration.
-- Numeric, duration, limit, frequency-goal forms and flexible schedule evaluation.
-- Habit edit/archive screens, calendar, analytics, reminders, backup/restore, or packaging.
-- IANA time-zone database integration. The prototype uses SQLite's system-local date for its Today screen; travel/time-zone-sensitive scheduling must be implemented and tested before release.
+## M3 — schedule-aware habit workflows
+- Persisted daily, weekday, every-N-days and weekly-frequency schedules.
+- Today view distinguishes due and not-scheduled habits.
+- Binary check-in/undo, skip, edit, pause/resume, archive and restore.
+- Check-in validation at the DB layer.
+- Pause history is retained and excluded from due/score behavior.
 
-## Validation boundary
-Run `python3 -m unittest discover -s tests -p 'test_*.py' -v` for schema checks.
-Run `cargo fmt --all -- --check`, `cargo check --all-targets`, `cargo test --all-targets`, and `cargo clippy --all-targets -- -D warnings` on Linux Mint with the pinned Rust toolchain and GTK 4 development libraries.
+## M4 — scoring foundation
+- Gregorian civil date conversion and deterministic period boundaries.
+- At-least/at-most achievement normalization.
+- Adherence, EMA habit-strength estimate and streak.
+- Closed missed days count as zero; skipped/paused periods are omitted.
+- Current open period is not scored prematurely.
 
-GitHub Actions has passed formatting and compilation on Ubuntu 24.04; 7 SQLite tests and shell syntax validation passed. Rust tests and Clippy still need their final CI result, and application launch still needs to be checked on the target Linux Mint workstation.
+## M5 — Goals and Milestones
+- Additive `0003_goal_milestones.sql` migration.
+- Existing goals and habit links remain intact.
+- Goal lifecycle and milestone create/complete/reopen/skip.
+- Visible progress based on completed vs non-skipped milestone count.
+- Independent goal migration ledger.
+
+## M6 — local data portability
+- CLI for verified backup, verify, restore to a new file and complete CSV bundle export.
+- SQLite online backup plus integrity/FK validation.
+- Refuse existing destinations; Unix outputs are owner-only.
+- Restore never replaces the running app database.
+
+## Validation required before release
+- Latest combined PR head must pass Rust formatting, compile, tests, Clippy, Python SQLite tests and shell validation.
+- Actual launch and manual workflow validation on the supported Linux Mint workstation.
+- Schedule editor/effective-date history, localization, accessibility, timezone/DST, packaging and license remain outstanding.
