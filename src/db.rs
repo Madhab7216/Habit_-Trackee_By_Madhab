@@ -140,7 +140,6 @@ pub fn set_today_completed(connection: &Connection, habit_id: i64, completed: bo
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
