@@ -34,7 +34,15 @@ The current pause/resume implementation is a first M3 slice, not a finished habi
 
 ## CI status
 
-At the last inspected run (#26), SQLite schema tests and the Linux audit-script syntax check had passed while the Rust format/build/unit-test/Clippy job was still running. The M3 lifecycle commits trigger a new run for the updated branch head. Check the live [Actions page](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions); do not describe the branch as fully CI-green until every job for the latest commit succeeds.
+Latest completed validation: [GitHub Actions run #32](https://github.com/Madhab7216/Habit_-Trackee_By_Madhab/actions/runs/43595801293), on feature-branch head `94e15ddbbd7acc7fc6a8aad93a2732f8be4bb3d3` — all jobs passed:
+- `cargo fmt --all -- --check`: passed.
+- `cargo check --all-targets`: passed.
+- `cargo test --all-targets`: passed, including the added lifecycle regression tests.
+- `cargo clippy --all-targets -- -D warnings`: passed.
+- Python SQLite schema tests: passed.
+- `bash -n scripts/audit-linux-mint.sh`: passed.
+
+This is hosted Ubuntu 24.04 CI evidence, not a substitute for the actual target Linux Mint workstation launch/persistence smoke test in Issue #2. The branch must be revalidated after any later code change.
 
 ## Remaining engineering work
 
