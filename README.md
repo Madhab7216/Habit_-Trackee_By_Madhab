@@ -28,6 +28,7 @@ The current feature branch includes:
 - Pure Rust date, schedule and scoring primitives.
 - Python SQLite schema tests, Rust tests and GitHub Actions checks.
 - Read-only Linux Mint environment audit script.
+- Local data portability CLI: complete CSV bundle export, verified SQLite online backup, verification and restore to a new database file.
 
 The current UI still creates daily binary habits only. The pure schedule/scoring engine is not yet integrated into the GTK forms, persisted schedule evaluation or analytics.
 
@@ -39,7 +40,7 @@ The current UI still creates daily binary habits only. The pure schedule/scoring
 4. **M6 — Trust and accessibility:** Bengali/English gettext, keyboard and screen-reader review, CSV export, consistent backup/restore and privacy hardening.
 5. **M7 — Release:** validate on a real supported Linux Mint machine, then package and test install/update/uninstall.
 
-See [Engineering Status](docs/ENGINEERING_STATUS.md), [Engineering Blueprint](docs/ENGINEERING_BLUEPRINT.md) and [M2 Prototype Scope](docs/M2_PROTOTYPE.md) for detailed acceptance criteria and validation boundaries.
+See [Engineering Status](docs/ENGINEERING_STATUS.md), [Engineering Blueprint](docs/ENGINEERING_BLUEPRINT.md), [M2 Prototype Scope](docs/M2_PROTOTYPE.md) and [Data Portability](docs/DATA_PORTABILITY.md) for detailed acceptance criteria and validation boundaries.
 
 ## Build on Linux Mint
 
@@ -52,6 +53,22 @@ cargo test --all-targets
 cargo clippy --all-targets -- -D warnings
 cargo run
 ~~~
+
+Local export and backup are available through the companion command-line tool:
+
+~~~bash
+# Export all available user-data tables to a new CSV directory
+cargo run --bin madhab-data-tool -- export-csv "$HOME/Documents/Madhab-Habit-Export"
+
+# Create and verify a consistent SQLite backup (destination must not exist)
+cargo run --bin madhab-data-tool -- backup "$HOME/Documents/madhab-habits-backup.sqlite3"
+
+# Verify and restore a backup into a separate new file
+cargo run --bin madhab-data-tool -- verify "$HOME/Documents/madhab-habits-backup.sqlite3"
+cargo run --bin madhab-data-tool -- restore "$HOME/Documents/madhab-habits-backup.sqlite3" "$HOME/Documents/madhab-habits-restored.sqlite3"
+~~~
+
+The active application database is never overwritten by restore. See [Data Portability](docs/DATA_PORTABILITY.md) for safety and format details.
 
 Run the read-only environment audit:
 
