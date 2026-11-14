@@ -520,7 +520,10 @@ fn refresh_goal_list(
             &[
                 &goal.progress_percent.to_string(),
                 &goal.milestone_completed.to_string(),
-                &goal.milestone_total.saturating_sub(goal.milestone_skipped).to_string(),
+                &goal
+                    .milestone_total
+                    .saturating_sub(goal.milestone_skipped)
+                    .to_string(),
                 &goal.milestone_skipped.to_string(),
                 &goal.linked_habits.to_string(),
             ],

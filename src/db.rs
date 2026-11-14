@@ -18,7 +18,9 @@ pub struct TodayHabit {
 
 pub fn get_setting(connection: &Connection, key: &str) -> Result<Option<String>> {
     connection
-        .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| row.get(0))
+        .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+            row.get(0)
+        })
         .optional()
 }
 
@@ -785,9 +787,14 @@ mod tests {
         let connection = memory_connection();
         assert_eq!(get_setting(&connection, "ui_language").unwrap(), None);
         set_setting(&connection, "ui_language", "bn").unwrap();
-        assert_eq!(get_setting(&connection, "ui_language").unwrap().as_deref(), Some("bn"));
+        assert_eq!(
+            get_setting(&connection, "ui_language").unwrap().as_deref(),
+            Some("bn")
+        );
         set_setting(&connection, "ui_language", "en").unwrap();
-        assert_eq!(get_setting(&connection, "ui_language").unwrap().as_deref(), Some("en"));
+        assert_eq!(
+            get_setting(&connection, "ui_language").unwrap().as_deref(),
+            Some("en")
+        );
     }
-
 }

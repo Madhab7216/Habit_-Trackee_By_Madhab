@@ -42,9 +42,9 @@ fn build_ui(application: &Application) {
                 .default_width(620)
                 .default_height(180)
                 .build();
-            window.set_child(Some(&Label::new(Some(
-                &i18n::tr("The local database could not be opened. See the terminal for details."),
-            ))));
+            window.set_child(Some(&Label::new(Some(&i18n::tr(
+                "The local database could not be opened. See the terminal for details.",
+            )))));
             window.present();
             return;
         }
@@ -96,7 +96,10 @@ fn build_ui(application: &Application) {
         i18n::tr("Every 2 days"),
         i18n::tr("Times per week"),
     ];
-    let schedule_refs = schedule_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let schedule_refs = schedule_labels
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     let schedule_picker = gtk::DropDown::from_strings(&schedule_refs);
     schedule_picker.set_selected(0);
     let weekly_target = gtk::SpinButton::with_range(1.0, 7.0, 1.0);
@@ -149,9 +152,9 @@ fn build_ui(application: &Application) {
     language_picker.connect_selected_notify(move |picker| {
         let code = if picker.selected() == 1 { "bn" } else { "en" };
         match db::set_setting(&language_connection.borrow(), "ui_language", code) {
-            Ok(()) => language_feedback.set_text(&i18n::tr(
-                "Language saved. Restart the app to apply.",
-            )),
+            Ok(()) => {
+                language_feedback.set_text(&i18n::tr("Language saved. Restart the app to apply."))
+            }
             Err(error) => language_feedback.set_text(&i18n::format(
                 "Could not save language preference: {0}",
                 &[&i18n::error(&error)],

@@ -1,7 +1,7 @@
 //! GNU gettext setup and small, explicit formatting helpers for the GTK interface.
 use std::{
     env,
-    ffi::CString,
+    ffi::{CStr, CString},
     path::PathBuf,
     sync::atomic::{AtomicU8, Ordering},
 };
@@ -82,16 +82,20 @@ pub fn initialize(preferred_language: Option<&str>) -> Language {
         .expect("locale directory must not contain NUL bytes");
     unsafe {
         let mut locale_result = setlocale(LC_MESSAGES, c"".as_ptr());
-        if locale_result.is_null() {
+        let locale_is_unusable = locale_result.is_null()
+            || matches!(CStr::from_ptr(locale_result).to_bytes(), b"C" | b"POSIX");
+        if locale_is_unusable {
             locale_result = setlocale(LC_MESSAGES, c"C.UTF-8".as_ptr());
+            if locale_result.is_null() {
+                locale_result = setlocale(LC_MESSAGES, c"C.utf8".as_ptr());
+            }
         }
+        // GNU gettext ignores LANGUAGE under the special C/POSIX locales.
+        // Prefer an available UTF-8 message locale before activating translations.
         let _ = locale_result;
         env::set_var("LANGUAGE", language.code());
         let _ = bindtextdomain(c"habit-trackers-by-madhab".as_ptr(), directory.as_ptr());
-        let _ = bind_textdomain_codeset(
-            c"habit-trackers-by-madhab".as_ptr(),
-            c"UTF-8".as_ptr(),
-        );
+        let _ = bind_textdomain_codeset(c"habit-trackers-by-madhab".as_ptr(), c"UTF-8".as_ptr());
         let _ = textdomain(c"habit-trackers-by-madhab".as_ptr());
     }
     language
