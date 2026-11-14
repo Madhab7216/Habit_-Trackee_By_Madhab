@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, Result};
+use rusqlite::{Connection, Result, params};
 use std::{env, fs, path::PathBuf};
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
@@ -28,7 +28,10 @@ fn data_directory() -> PathBuf {
         return PathBuf::from(xdg_data_home).join("madhab-habit-tracker");
     }
     if let Some(home) = env::var_os("HOME") {
-        return PathBuf::from(home).join(".local").join("share").join("madhab-habit-tracker");
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("madhab-habit-tracker");
     }
     PathBuf::from(".").join(".madhab-habit-tracker")
 }
