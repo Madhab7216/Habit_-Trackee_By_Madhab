@@ -51,6 +51,11 @@ impl CivilDate {
     /// Reconstruct a civil date from the day number returned by ordinal().
     /// Returns None outside the supported Gregorian years 0001..=9999.
     pub fn from_ordinal(ordinal: i64) -> Option<Self> {
+        let min = Self::new(1, 1, 1)?.ordinal();
+        let max = Self::new(9_999, 12, 31)?.ordinal();
+        if !(min..=max).contains(&ordinal) {
+            return None;
+        }
         let z = ordinal.checked_add(719_468)?;
         let era = z.div_euclid(146_097);
         let day_of_era = z - era * 146_097;
