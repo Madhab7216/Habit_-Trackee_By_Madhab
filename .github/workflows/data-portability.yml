@@ -1,0 +1,42 @@
+name: Data portability checks
+
+on:
+  push:
+    branches: ["work/m6-data-portability"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portability-rust:
+    name: Backup, restore and CSV export
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install GTK build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential pkg-config libgtk-4-dev
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.100.0
+          components: rustfmt, clippy
+      - name: Format the new data-portability files
+        run: rustfmt --edition 2024 --check src/portability.rs src/bin/data-tool.rs
+      - name: Compile all targets
+        run: cargo check --all-targets
+      - name: Run all Rust tests
+        run: cargo test --all-targets
+      - name: Run Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Run SQLite schema tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
