@@ -250,14 +250,12 @@ fn refresh_list(
     };
 
     if habits.is_empty() {
-        append_message(
-            list,
-            if archived_view {
-                &i18n::tr("No archived habits.")
-            } else {
-                &i18n::tr("No habits yet. Add one above to begin.")
-            },
-        );
+        let empty_message = if archived_view {
+            i18n::tr("No archived habits.")
+        } else {
+            i18n::tr("No habits yet. Add one above to begin.")
+        };
+        append_message(list, &empty_message);
         return;
     }
 

@@ -479,14 +479,12 @@ fn refresh_goal_list(
     };
 
     if goals.is_empty() {
-        append_list_message(
-            list,
-            if archived_view {
-                &i18n::tr("No archived goals.")
-            } else {
-                &i18n::tr("No goals yet. Add your first goal above.")
-            },
-        );
+        let empty_message = if archived_view {
+            i18n::tr("No archived goals.")
+        } else {
+            i18n::tr("No goals yet. Add your first goal above.")
+        };
+        append_list_message(list, &empty_message);
         return;
     }
 
