@@ -252,3 +252,6 @@ msgstr "Could not save habit links: {0}"
 
 msgid "No unarchived habits are available yet. Create a habit in Today, then return here."
 msgstr "No unarchived habits are available yet. Create a habit in Today, then return here."
+
+msgid "Habit Trackers by Madhab"
+msgstr "Habit Trackers by Madhab"

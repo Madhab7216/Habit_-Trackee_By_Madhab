@@ -252,3 +252,6 @@ msgstr "অভ্যাসের লিংক সংরক্ষণ করা �
 
 msgid "No unarchived habits are available yet. Create a habit in Today, then return here."
 msgstr "এখনও কোনো সক্রিয় অভ্যাস নেই। আজকের পাতায় একটি অভ্যাস তৈরি করে এখানে ফিরে আসুন।"
+
+msgid "Habit Trackers by Madhab"
+msgstr "مাধবের অভ্যাস ট্র্যাকার"

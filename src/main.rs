@@ -38,7 +38,7 @@ fn build_ui(application: &Application) {
             eprintln!("Could not open the local habit database: {error}");
             let window = ApplicationWindow::builder()
                 .application(application)
-                .title("Habit Trackers by Madhab")
+                .title(i18n::tr("Habit Trackers by Madhab"))
                 .default_width(620)
                 .default_height(180)
                 .build();
@@ -55,14 +55,14 @@ fn build_ui(application: &Application) {
     });
     let window = ApplicationWindow::builder()
         .application(application)
-        .title("Habit Trackers by Madhab")
+        .title(i18n::tr("Habit Trackers by Madhab"))
         .default_width(1040)
         .default_height(720)
         .build();
 
     let header = HeaderBar::new();
     header.set_title_widget(Some(&Label::new(Some(&i18n::tr("Madhab Habit Tracker")))));
-    let goals_button = Button::with_label("Goals & milestones");
+    let goals_button = Button::with_label(&i18n::tr("Goals & milestones"));
     let goals_parent = window.clone();
     let goals_connection = Rc::clone(&state.connection);
     goals_button.connect_clicked(move |_| {
