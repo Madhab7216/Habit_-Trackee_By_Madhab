@@ -2,10 +2,10 @@
 pub mod db;
 #[path = "../domain.rs"]
 pub mod domain;
-#[path = "../routines.rs"]
-pub mod routines;
 #[path = "../portability.rs"]
 pub mod portability;
+#[path = "../routines.rs"]
+pub mod routines;
 
 use std::{env, error::Error, io, path::Path, process::ExitCode};
 
