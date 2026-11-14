@@ -572,7 +572,7 @@ mod tests {
 
         assert_eq!(result.scoring_version, 1);
         assert_eq!(result.closed_periods, 14);
-        assert_eq!(result.missed_periods, 11);
+        assert_eq!(result.missed_periods, 10);
         assert_eq!(result.skipped_periods, 1);
         assert_eq!(result.adherence, Some(3.0 / 13.0));
         assert_eq!(result.current_streak, 1);
