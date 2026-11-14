@@ -12,7 +12,7 @@ pub struct CivilDate {
 
 impl CivilDate {
     pub fn new(year: i32, month: u8, day: u8) -> Option<Self> {
-        if year < 1 || !(1..=12).contains(&month) {
+        if !(1..=9_999).contains(&year) || !(1..=12).contains(&month) {
             return None;
         }
         let max_day = days_in_month(year, month);
@@ -259,7 +259,7 @@ pub fn adherence(results: &[PeriodResult]) -> Result<Option<f64>, ScoreError> {
     for result in results {
         if let PeriodResult::Achievement(value) = result {
             validate_ratio(*value)?;
-            total += value;
+            total += *value;
             count += 1;
         }
     }
@@ -482,10 +482,9 @@ mod tests {
             update_strength(None, PeriodResult::Achievement(0.8), 0.25).unwrap(),
             Some(0.8)
         );
-        assert_eq!(
-            update_strength(Some(0.8), PeriodResult::Achievement(0.4), 0.25).unwrap(),
-            Some(0.7)
-        );
+        let updated =
+            update_strength(Some(0.8), PeriodResult::Achievement(0.4), 0.25).unwrap().unwrap();
+        assert!((updated - 0.7).abs() < 1e-12);
         assert_eq!(
             update_strength(Some(0.7), PeriodResult::Skipped, 0.25).unwrap(),
             Some(0.7)
