@@ -202,7 +202,8 @@ fn refresh_list(
             let restore_parent = parent.clone();
             let habit_id = habit.id;
             restore_button.connect_clicked(move |_| {
-                if let Err(error) = db::restore_habit(&restore_state.connection.borrow(), habit_id) {
+                if let Err(error) = db::restore_habit(&restore_state.connection.borrow(), habit_id)
+                {
                     eprintln!("Could not restore habit: {error}");
                 }
                 refresh_list(&restore_list, &restore_state, &restore_parent, true);
