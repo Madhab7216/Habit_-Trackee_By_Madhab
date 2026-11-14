@@ -48,6 +48,30 @@ impl CivilDate {
         i64::from(era * 146_097 + day_of_era - 719_468)
     }
 
+    /// Reconstruct a civil date from the day number returned by ordinal().
+    /// Returns None outside the supported Gregorian years 0001..=9999.
+    pub fn from_ordinal(ordinal: i64) -> Option<Self> {
+        let z = ordinal.checked_add(719_468)?;
+        let era = z.div_euclid(146_097);
+        let day_of_era = z - era * 146_097;
+        let year_of_era =
+            (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096)
+                / 365;
+        let year = year_of_era + era * 400;
+        let day_of_year = day_of_era
+            - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+        let month_part = (5 * day_of_year + 2) / 153;
+        let day = day_of_year - (153 * month_part + 2) / 5 + 1;
+        let month = month_part + if month_part < 10 { 3 } else { -9 };
+        let year = year + if month <= 2 { 1 } else { 0 };
+
+        Self::new(
+            i32::try_from(year).ok()?,
+            u8::try_from(month).ok()?,
+            u8::try_from(day).ok()?,
+        )
+    }
+
     /// ISO weekday index: Monday = 0, Sunday = 6.
     pub fn weekday_monday_zero(self) -> u8 {
         (self.ordinal() + 3).rem_euclid(7) as u8
@@ -349,6 +373,22 @@ mod tests {
         assert!(CivilDate::new(2025, 2, 29).is_none());
         assert!(CivilDate::new(1900, 2, 29).is_none());
         assert!(CivilDate::new(2000, 2, 29).is_some());
+    }
+
+    #[test]
+    fn ordinal_round_trips_across_leap_and_century_boundaries() {
+        for value in [
+            date(1, 1, 1),
+            date(1900, 2, 28),
+            date(2000, 2, 29),
+            date(2024, 2, 29),
+            date(2026, 11, 14),
+            date(9999, 12, 31),
+        ] {
+            assert_eq!(CivilDate::from_ordinal(value.ordinal()), Some(value));
+        }
+        assert!(CivilDate::from_ordinal(date(1, 1, 1).ordinal() - 1).is_none());
+        assert!(CivilDate::from_ordinal(date(9999, 12, 31).ordinal() + 1).is_none());
     }
 
     #[test]
