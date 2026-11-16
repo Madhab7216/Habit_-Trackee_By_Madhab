@@ -135,22 +135,32 @@ def main() -> int:
         )
         return 1
 
-    text_inputs = [
-        name
-        for role, name in items
-        if role in {"text", "text box", "entry"} and name
-    ]
-    if not text_inputs:
+    expected_fields = {
+        "Habit name": {"text", "text box", "entry"},
+        "Schedule": {"combo box", "drop down", "list"},
+        "Weekly target": {"spin button", "text"},
+    }
+    missing_fields = []
+    for field_name, allowed_roles in expected_fields.items():
+        if not any(
+            role in allowed_roles and name == field_name
+            for role, name in items
+        ):
+            missing_fields.append(field_name)
+
+    if missing_fields:
         print(
-            "No named text input was exposed in the Today window's AT-SPI tree.",
+            "Expected named form controls were not exposed through AT-SPI: "
+            + ", ".join(repr(name) for name in missing_fields),
             file=sys.stderr,
         )
+        print("Observed controls: " + repr(items), file=sys.stderr)
         return 1
 
     print("AT-SPI accessibility smoke test passed.")
     print("Accessible window: " + WINDOW_TITLE)
     print("Named buttons: " + ", ".join(sorted(EXPECTED_BUTTONS)))
-    print("Named text input(s): " + ", ".join(sorted(set(text_inputs))))
+    print("Named form controls: " + ", ".join(sorted(expected_fields)))
     print(f"Accessible objects inspected: {len(items)}")
     return 0
 
