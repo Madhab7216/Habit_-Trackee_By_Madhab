@@ -1,6 +1,7 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod measurable_habits;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
