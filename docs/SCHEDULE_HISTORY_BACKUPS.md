@@ -2,7 +2,7 @@
 
 ## Guarantee
 
-The schedule-history service adds its own migration ledger and an append-only `habit_schedule_revisions` table without changing the existing core schema version. A normal SQLite online backup already copies every table, but a backup is not trustworthy if its schedule-history ledger says the migration is installed while the revision table or a habit's baseline is missing.
+The schedule-history service adds its own migration ledger and an append-only `habit_schedule_revisions` table without changing the existing core schema version. A normal SQLite online backup already copies every table, but a backup is not trustworthy if its schedule-history ledger says the migration is installed while the revision table or a habit's baseline is missing. The follow-up also prevents a time-limited newer revision from expiring and accidentally exposing an older superseded revision again.
 
 The portability verifier now checks this additive schema alongside SQLite integrity and foreign-key consistency:
 
