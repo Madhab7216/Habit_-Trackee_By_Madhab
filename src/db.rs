@@ -1,5 +1,5 @@
 use crate::domain::{Cadence, CivilDate, HabitSchedule};
-use rusqlite::{Connection, Result, params};
+use rusqlite::{Connection, OptionalExtension, Result, params};
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -7,7 +7,8 @@ use std::{
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const PAUSE_MIGRATION: &str = include_str!("../migrations/0002_pause_periods.sql");
-const SCHEMA_VERSION: i64 = 2;
+const SCHEDULE_REVISION_MIGRATION: &str = include_str!("../migrations/0003_schedule_revisions.sql");
+const SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Clone)]
 pub struct TodayHabit {
@@ -164,6 +165,14 @@ fn migrate(connection: &mut Connection) -> Result<()> {
         transaction.execute_batch(PAUSE_MIGRATION)?;
         transaction.execute("INSERT INTO schema_migrations(version) VALUES (2)", [])?;
         transaction.commit()?;
+        current_version = 2;
+    }
+
+    if current_version < 3 {
+        let transaction = connection.transaction()?;
+        transaction.execute_batch(SCHEDULE_REVISION_MIGRATION)?;
+        transaction.execute("INSERT INTO schema_migrations(version) VALUES (3)", [])?;
+        transaction.commit()?;
     }
 
     Ok(())
@@ -240,6 +249,155 @@ pub fn create_habit_with_cadence(
     Ok(())
 }
 
+
+/// Add or replace a future-effective schedule revision without rewriting past rules.
+///
+/// A revision takes effect on effective_from (inclusive). Existing history is closed
+/// at that date (exclusive). Same-day and retrospective changes are deliberately rejected.
+pub fn change_habit_schedule(
+    connection: &Connection,
+    habit_id: i64,
+    cadence: Cadence,
+    effective_from: CivilDate,
+) -> Result<()> {
+    let today = local_today(connection)?;
+    if effective_from <= today {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "schedule changes must take effect on a future local date".to_string(),
+        ));
+    }
+    HabitSchedule::new(cadence, effective_from, None)
+        .map_err(|_| invalid_schedule_field("new schedule"))?;
+
+    let (schedule_type, weekday_mask, interval_days, target_per_period) =
+        cadence_to_columns(cadence);
+    let transaction = connection.unchecked_transaction()?;
+
+    let active: bool = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL)",
+        [habit_id],
+        |row| row.get(0),
+    )?;
+    if !active {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+
+    let current: Option<(i64, String, String)> = transaction
+        .query_row(
+            "SELECT id, effective_from_date, time_zone_id
+             FROM habit_schedule_revisions
+             WHERE habit_id = ?1 AND effective_until_date IS NULL
+             ORDER BY effective_from_date DESC
+             LIMIT 1",
+            [habit_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+
+    let (current_id, current_from_text, time_zone_id) =
+        current.ok_or_else(|| invalid_schedule_field("missing open schedule revision"))?;
+    let current_from = parse_civil_date(&current_from_text)
+        .ok_or_else(|| invalid_schedule_field("effective_from_date"))?;
+
+    if effective_from < current_from {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "schedule revisions must be appended in effective-date order".to_string(),
+        ));
+    }
+
+    if effective_from == current_from {
+        // The open revision may be edited only while it is still in the future. The
+        // database trigger independently enforces this condition.
+        transaction.execute(
+            "UPDATE habit_schedule_revisions
+             SET schedule_type = ?1, weekday_mask = ?2, interval_days = ?3,
+                 target_per_period = ?4, period_unit = 'week', schedule_end_date = NULL
+             WHERE id = ?5 AND effective_until_date IS NULL",
+            params![
+                schedule_type,
+                weekday_mask,
+                interval_days,
+                target_per_period,
+                current_id
+            ],
+        )?;
+    } else {
+        transaction.execute(
+            "UPDATE habit_schedule_revisions
+             SET effective_until_date = ?1
+             WHERE id = ?2 AND effective_until_date IS NULL",
+            params![effective_from.to_string(), current_id],
+        )?;
+        transaction.execute(
+            "INSERT INTO habit_schedule_revisions (
+                habit_id, effective_from_date, schedule_type, weekday_mask,
+                interval_days, target_per_period, period_unit, schedule_end_date,
+                time_zone_id
+             )
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'week', NULL, ?7)",
+            params![
+                habit_id,
+                effective_from.to_string(),
+                schedule_type,
+                weekday_mask,
+                interval_days,
+                target_per_period,
+                time_zone_id
+            ],
+        )?;
+    }
+
+    transaction.commit()
+}
+
+/// Return the schedule that was in force on a civil date, including its anchor date.
+pub fn habit_schedule_for_date(
+    connection: &Connection,
+    habit_id: i64,
+    date: CivilDate,
+) -> Result<Option<HabitSchedule>> {
+    let revision: Option<(String, Option<i64>, Option<i64>, Option<i64>, String, Option<String>)> =
+        connection
+            .query_row(
+                "SELECT schedule_type, weekday_mask, interval_days, target_per_period,
+                        effective_from_date, schedule_end_date
+                 FROM habit_schedule_revisions
+                 WHERE habit_id = ?1
+                   AND effective_from_date <= ?2
+                   AND (effective_until_date IS NULL OR ?2 < effective_until_date)
+                 ORDER BY effective_from_date DESC
+                 LIMIT 1",
+                params![habit_id, date.to_string()],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )
+            .optional()?;
+
+    let Some((kind, weekday_mask, interval_days, target, start_text, end_text)) = revision else {
+        return Ok(None);
+    };
+    let cadence = cadence_from_values(&kind, weekday_mask, interval_days, target)?;
+    let start = parse_civil_date(&start_text)
+        .ok_or_else(|| invalid_schedule_field("effective_from_date"))?;
+    let end = end_text
+        .map(|value| {
+            parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("schedule_end_date"))
+        })
+        .transpose()?;
+
+    HabitSchedule::new(cadence, start, end)
+        .map(Some)
+        .map_err(|_| invalid_schedule_field("schedule bounds"))
+}
+
 /// Rename an active habit without changing its history or schedule.
 pub fn rename_habit(connection: &Connection, habit_id: i64, name: &str) -> Result<()> {
     let normalized = validate_habit_name(name)?;
@@ -308,8 +466,8 @@ pub fn today_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
 /// calendar/history views and avoids coupling schedule tests to the wall clock.
 pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<TodayHabit>> {
     let mut statement = connection.prepare(
-        "SELECT h.id, h.name, h.schedule_type, h.weekday_mask, h.interval_days,
-                h.target_per_period, h.start_date, h.end_date,
+        "SELECT h.id, h.name, r.schedule_type, r.weekday_mask, r.interval_days,
+                r.target_per_period, r.effective_from_date, r.schedule_end_date,
                 EXISTS (
                     SELECT 1 FROM habit_entries e
                     WHERE e.habit_id = h.id
@@ -323,6 +481,10 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
                       AND (p.ends_on IS NULL OR ?1 < p.ends_on)
                 ) AS paused
          FROM habits h
+         JOIN habit_schedule_revisions r
+           ON r.habit_id = h.id
+          AND r.effective_from_date <= ?1
+          AND (r.effective_until_date IS NULL OR ?1 < r.effective_until_date)
          WHERE h.archived_at IS NULL
          ORDER BY h.sort_order, h.id",
     )?;
@@ -356,30 +518,60 @@ fn local_today(connection: &Connection) -> Result<CivilDate> {
 
 fn cadence_from_row(row: &rusqlite::Row<'_>) -> Result<Cadence> {
     let schedule_type: String = row.get(2)?;
-    match schedule_type.as_str() {
+    cadence_from_values(&schedule_type, row.get(3)?, row.get(4)?, row.get(5)?)
+}
+
+fn cadence_from_values(
+    schedule_type: &str,
+    raw_weekday_mask: Option<i64>,
+    raw_interval_days: Option<i64>,
+    raw_target_per_period: Option<i64>,
+) -> Result<Cadence> {
+    match schedule_type {
         "daily" => Ok(Cadence::Daily),
         "weekdays" => {
-            let raw: Option<i64> = row.get(3)?;
-            let weekday_mask = raw
+            let weekday_mask = raw_weekday_mask
                 .and_then(|value| u8::try_from(value).ok())
                 .ok_or_else(|| invalid_schedule_field("weekday_mask"))?;
             Ok(Cadence::Weekdays { weekday_mask })
         }
         "every_n_days" => {
-            let raw: Option<i64> = row.get(4)?;
-            let interval = raw
+            let interval = raw_interval_days
                 .and_then(|value| u16::try_from(value).ok())
                 .ok_or_else(|| invalid_schedule_field("interval_days"))?;
             Ok(Cadence::EveryNDays { interval })
         }
         "times_per_week" => {
-            let raw: Option<i64> = row.get(5)?;
-            let target = raw
+            let target = raw_target_per_period
                 .and_then(|value| u8::try_from(value).ok())
                 .ok_or_else(|| invalid_schedule_field("target_per_period"))?;
             Ok(Cadence::TimesPerWeek { target })
         }
         _ => Err(invalid_schedule_field("schedule_type")),
+    }
+}
+
+fn cadence_to_columns(cadence: Cadence) -> (&'static str, Option<i64>, Option<i64>, Option<i64>) {
+    match cadence {
+        Cadence::Daily => ("daily", None, None, None),
+        Cadence::Weekdays { weekday_mask } => (
+            "weekdays",
+            Some(i64::from(weekday_mask)),
+            None,
+            None,
+        ),
+        Cadence::EveryNDays { interval } => (
+            "every_n_days",
+            None,
+            Some(i64::from(interval)),
+            None,
+        ),
+        Cadence::TimesPerWeek { target } => (
+            "times_per_week",
+            None,
+            None,
+            Some(i64::from(target)),
+        ),
     }
 }
 
@@ -606,14 +798,14 @@ mod tests {
     }
 
     #[test]
-    fn migrations_reach_schema_version_two() {
+    fn migrations_reach_schema_version_three() {
         let connection = memory_connection();
         let version: i64 = connection
             .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
                 row.get(0)
             })
             .expect("read schema version");
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 
     #[test]
@@ -756,16 +948,82 @@ mod tests {
     }
 
     #[test]
+    fn schedule_changes_are_future_dated_and_preserve_past_rules() {
+        let connection = memory_connection();
+        let habit_id = new_habit(&connection, "Read");
+
+        let today = local_today(&connection).expect("read current local date");
+        let future_text: String = connection
+            .query_row("SELECT date('now', 'localtime', '+1 day')", [], |row| row.get(0))
+            .expect("read next local date");
+        let future = parse_civil_date(&future_text).expect("parse next local date");
+        let next_weekday = 1_u8 << future.weekday_monday_zero();
+
+        change_habit_schedule(
+            &connection,
+            habit_id,
+            Cadence::Weekdays { weekday_mask: next_weekday },
+            future,
+        ).expect("schedule future weekday rule");
+
+        let old_schedule = habit_schedule_for_date(&connection, habit_id, today)
+            .expect("read old schedule")
+            .expect("old schedule exists");
+        assert_eq!(old_schedule.cadence(), Cadence::Daily);
+
+        let future_schedule = habit_schedule_for_date(&connection, habit_id, future)
+            .expect("read future schedule")
+            .expect("future schedule exists");
+        assert_eq!(future_schedule.cadence(), Cadence::Weekdays { weekday_mask: next_weekday });
+
+        change_habit_schedule(
+            &connection,
+            habit_id,
+            Cadence::EveryNDays { interval: 2 },
+            future,
+        ).expect("replace still-future revision");
+        let replaced = habit_schedule_for_date(&connection, habit_id, future)
+            .expect("read replaced schedule")
+            .expect("replaced schedule exists");
+        assert_eq!(replaced.cadence(), Cadence::EveryNDays { interval: 2 });
+
+        assert!(change_habit_schedule(&connection, habit_id, Cadence::Daily, today).is_err());
+
+        let revision_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM habit_schedule_revisions WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("count revisions");
+        assert_eq!(revision_count, 2);
+    }
+
+    #[test]
+    fn historical_schedule_revisions_cannot_be_changed_or_deleted() {
+        let connection = memory_connection();
+        let habit_id = new_habit(&connection, "Write");
+        let result = connection.execute(
+            "UPDATE habit_schedule_revisions SET schedule_type = 'weekdays', weekday_mask = 1
+             WHERE habit_id = ?1",
+            [habit_id],
+        );
+        assert!(result.is_err());
+        let result = connection.execute(
+            "DELETE FROM habit_schedule_revisions WHERE habit_id = ?1",
+            [habit_id],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn persisted_weekday_schedule_only_marks_selected_days() {
         let connection = memory_connection();
-        let habit_id = new_habit(&connection, "Walk");
-        connection
-            .execute(
-                "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
-                start_date = '2026-11-01' WHERE id = ?1",
-                [habit_id],
-            )
-            .expect("set Monday-only schedule");
+        connection.execute(
+            "INSERT INTO habits(name, schedule_type, weekday_mask, start_date)
+             VALUES ('Walk', 'weekdays', 1, '2026-11-01')",
+            [],
+        ).expect("insert Monday-only schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 16)).unwrap()[0].scheduled);
         assert!(!habits_for_date(&connection, date(2026, 11, 15)).unwrap()[0].scheduled);
@@ -774,14 +1032,11 @@ mod tests {
     #[test]
     fn every_n_days_uses_start_anchor_and_date_bounds() {
         let connection = memory_connection();
-        let habit_id = new_habit(&connection, "Stretch");
-        connection
-            .execute(
-                "UPDATE habits SET schedule_type = 'every_n_days', interval_days = 2,
-                start_date = '2026-11-01', end_date = '2026-11-10' WHERE id = ?1",
-                [habit_id],
-            )
-            .expect("set every-two-days schedule");
+        connection.execute(
+            "INSERT INTO habits(name, schedule_type, interval_days, start_date, end_date)
+             VALUES ('Stretch', 'every_n_days', 2, '2026-11-01', '2026-11-10')",
+            [],
+        ).expect("insert every-two-days schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 3)).unwrap()[0].scheduled);
         assert!(!habits_for_date(&connection, date(2026, 11, 4)).unwrap()[0].scheduled);
@@ -792,14 +1047,11 @@ mod tests {
     #[test]
     fn weekly_frequency_uses_a_monday_anchored_evaluation_period() {
         let connection = memory_connection();
-        let habit_id = new_habit(&connection, "Practice piano");
-        connection
-            .execute(
-                "UPDATE habits SET schedule_type = 'times_per_week', target_per_period = 3,
-                period_unit = 'week', start_date = '2026-11-01' WHERE id = ?1",
-                [habit_id],
-            )
-            .expect("set times-per-week schedule");
+        connection.execute(
+            "INSERT INTO habits(name, schedule_type, target_per_period, period_unit, start_date)
+             VALUES ('Practice piano', 'times_per_week', 3, 'week', '2026-11-01')",
+            [],
+        ).expect("insert times-per-week schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 9)).unwrap()[0].scheduled);
         assert!(habits_for_date(&connection, date(2026, 11, 14)).unwrap()[0].scheduled);
@@ -808,14 +1060,12 @@ mod tests {
     #[test]
     fn unscheduled_checkins_are_rejected_and_due_checkins_are_saved() {
         let connection = memory_connection();
-        let habit_id = new_habit(&connection, "Read");
-        connection
-            .execute(
-                "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
-                start_date = '2026-11-01' WHERE id = ?1",
-                [habit_id],
-            )
-            .expect("set Monday-only schedule");
+        connection.execute(
+            "INSERT INTO habits(name, schedule_type, weekday_mask, start_date)
+             VALUES ('Read', 'weekdays', 1, '2026-11-01')",
+            [],
+        ).expect("insert Monday-only schedule");
+        let habit_id = connection.last_insert_rowid();
 
         assert!(set_completed_for_date(&connection, habit_id, true, date(2026, 11, 15)).is_err());
         set_completed_for_date(&connection, habit_id, true, date(2026, 11, 16))
