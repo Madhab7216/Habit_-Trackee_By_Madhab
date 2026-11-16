@@ -38,6 +38,10 @@ class ReleaseReadinessTests(unittest.TestCase):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("fixture\n", encoding="utf-8")
+        (self.root / "scripts/validate_sbom.py").write_text(
+            'EXPECTED_VERSION = "0.1.0"\\n',
+            encoding="utf-8",
+        )
         metainfo = self.root / "packaging/org.madhab.habittracker.metainfo.xml"
         metainfo.write_text(
             '<component><releases><release version="0.1.0"/></releases></component>',
@@ -94,6 +98,14 @@ class ReleaseReadinessTests(unittest.TestCase):
         (self.root / "SECURITY.md").unlink()
         errors = inspect_release(self.root, "v0.1.0")
         self.assertTrue(any("required release file is missing: SECURITY.md" in error for error in errors))
+
+    def test_sbom_validator_version_must_match_package(self) -> None:
+        (self.root / "scripts/validate_sbom.py").write_text(
+            'EXPECTED_VERSION = "0.0.9"\\n',
+            encoding="utf-8",
+        )
+        errors = inspect_release(self.root, "v0.1.0")
+        self.assertTrue(any("SBOM validator EXPECTED_VERSION" in error for error in errors))
 
     def test_license_file_field_is_respected(self) -> None:
         manifest = self.root / "Cargo.toml"
