@@ -1,0 +1,27 @@
+version: 2
+
+updates:
+  # Track Rust dependencies on the active engineering branch.
+  # Dependabot reads this configuration from the default branch;
+  # it becomes active after this security increment reaches main.
+  - package-ecosystem: cargo
+    directory: /
+    target-branch: work/linux-mint-habit-tracker-foundation
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+
+  # Keep GitHub Actions pinned to reviewed commit SHAs while still
+  # receiving update proposals when upstream actions move forward.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: work/linux-mint-habit-tracker-foundation
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:15"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
