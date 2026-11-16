@@ -43,6 +43,8 @@ Before a release candidate:
 
 Dependabot configuration is read from the repository's default branch. The configuration in this increment targets the active engineering branch and becomes operational after it is merged into the default branch.
 
+The GitHub Actions schedule trigger is also default-branch-only. The push-triggered run on this feature branch validates the new workflow now; the weekly scheduled scan becomes active after the workflow file reaches the default branch. Manual dispatch is likewise best treated as a post-merge operation.
+
 ## 4. GitHub workflow security
 
 - Workflows use permissions: contents: read unless a documented job needs more.
