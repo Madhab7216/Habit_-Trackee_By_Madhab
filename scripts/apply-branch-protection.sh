@@ -46,11 +46,11 @@ cat >"$payload_file" <<'JSON'
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": [
-      "rust-check",
-      "schema-tests",
-      "audit-script",
-      "Backup, restore and CSV export"
+    "checks": [
+      { "context": "rust-check" },
+      { "context": "schema-tests" },
+      { "context": "audit-script" },
+      { "context": "Backup, restore and CSV export" }
     ]
   },
   "enforce_admins": true,
@@ -78,11 +78,14 @@ for branch in "$BRANCH_MAIN" "$BRANCH_FOUNDATION"; do
   if gh api "$endpoint" >"$tmp_dir/current.json" 2>"$tmp_dir/error.log"; then
     if jq -e --argjson required_checks "$REQUIRED_CHECKS" '
       .required_status_checks.strict == true
-      and ((.required_status_checks.contexts // []) | sort) == ($required_checks | sort)
+      and ((.required_status_checks.checks // [] | map(.context)) | sort) == ($required_checks | sort)
       and (.enforce_admins.enabled // false) == true
       and (.required_pull_request_reviews.required_approving_review_count // -1) == 0
       and (.required_pull_request_reviews.dismiss_stale_reviews // false) == true
       and (.required_pull_request_reviews.require_code_owner_reviews // true) == false
+      and (.required_pull_request_reviews.require_last_push_approval // false) == false
+      and (.required_linear_history.enabled // false) == false
+      and (.lock_branch.enabled // false) == false
       and (.allow_force_pushes.enabled // false) == false
       and (.allow_deletions.enabled // false) == false
       and (.required_conversation_resolution.enabled // false) == true
@@ -166,12 +169,17 @@ for branch in "$BRANCH_MAIN" "$BRANCH_FOUNDATION"; do
     gh api "$endpoint" >"$tmp_dir/verified.json"
     if ! jq -e --argjson required_checks "$REQUIRED_CHECKS" '
       .required_status_checks.strict == true
-      and ((.required_status_checks.contexts // []) | sort) == ($required_checks | sort)
+      and ((.required_status_checks.checks // [] | map(.context)) | sort) == ($required_checks | sort)
       and (.enforce_admins.enabled // false) == true
       and (.required_pull_request_reviews.required_approving_review_count // -1) == 0
+      and (.required_pull_request_reviews.dismiss_stale_reviews // false) == true
+      and (.required_pull_request_reviews.require_code_owner_reviews // true) == false
+      and (.required_pull_request_reviews.require_last_push_approval // false) == false
       and (.allow_force_pushes.enabled // false) == false
       and (.allow_deletions.enabled // false) == false
       and (.required_conversation_resolution.enabled // false) == true
+      and (.required_linear_history.enabled // false) == false
+      and (.lock_branch.enabled // false) == false
     ' "$tmp_dir/verified.json" >/dev/null; then
       printf '[ERROR] Verification did not match for %s. Inspect GitHub settings before retrying.\n' "$branch" >&2
       exit 1
