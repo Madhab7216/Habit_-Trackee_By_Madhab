@@ -14,11 +14,12 @@ use std::{
 
 pub type PortabilityResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+const CURRENT_SCHEMA_VERSION: i64 = 3;
 const EXPORT_FORMAT_VERSION: u32 = 1;
 const EXPORT_TABLES: &[&str] = &[
     "categories",
     "habits",
+    "habit_schedule_revisions",
     "habit_entries",
     "habit_pause_periods",
     "habit_tags",
@@ -149,6 +150,22 @@ pub fn verify_database(connection: &Connection) -> PortabilityResult<i64> {
             return Err(
                 invalid_data("schema version 2 database is missing habit_pause_periods").into(),
             );
+        }
+    }
+
+    if version >= 3 {
+        let has_schedule_history: bool = connection.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sqlite_master
+                WHERE type = 'table' AND name = 'habit_schedule_revisions'
+            )",
+            [],
+            |row| row.get(0),
+        )?;
+        if !has_schedule_history {
+            return Err(invalid_data(
+                "schema version 3 database is missing habit_schedule_revisions"
+            ).into());
         }
     }
 
@@ -397,6 +414,12 @@ mod tests {
         connection
             .execute("INSERT INTO schema_migrations(version) VALUES (2)", [])
             .expect("record schema v2");
+        connection
+            .execute_batch(include_str!("../migrations/0003_schedule_revisions.sql"))
+            .expect("apply schema v3");
+        connection
+            .execute("INSERT INTO schema_migrations(version) VALUES (3)", [])
+            .expect("record schema v3");
 
         connection
             .execute(
