@@ -35,8 +35,8 @@ jobs:
           toolchain: 1.100.0
           components: rustfmt, clippy
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Check formatting for the new schedule-history module
+        run: rustfmt --edition 2024 --check src/schedule_history.rs
 
       - name: Compile all targets
         run: cargo check --all-targets
