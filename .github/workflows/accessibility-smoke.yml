@@ -1,0 +1,44 @@
+name: GTK accessibility smoke test
+
+on:
+  push:
+    branches: ["work/linux-mint-habit-tracker-foundation", "work/m6-accessibility-smoke"]
+  pull_request:
+    branches: ["main", "work/linux-mint-habit-tracker-foundation"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accessibility-\${{ github.workflow }}-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  atspi-smoke:
+    name: Inspect GTK controls through AT-SPI
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install GTK, AT-SPI and virtual-display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential pkg-config libgtk-4-dev \
+            xvfb xauth dbus-daemon at-spi2-core \
+            gir1.2-atspi-2.0 python3-gi
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.100.0
+
+      - name: Build desktop application
+        run: cargo build --bin madhab-habit-tracker
+
+      - name: Inspect accessible names and roles
+        run: bash scripts/smoke-linux-accessibility.sh
