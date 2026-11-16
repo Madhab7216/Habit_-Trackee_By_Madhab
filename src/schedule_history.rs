@@ -348,6 +348,34 @@ pub fn initialize(connection: &mut Connection) -> Result<(), ScheduleHistoryErro
     Ok(())
 }
 
+/// Ensure a newly inserted legacy-shaped habit has its baseline schedule revision.
+///
+/// This is intentionally safe for repeated calls. The application invokes it in the
+/// same transaction as habit creation so backup/restore never sees an untracked habit.
+pub fn ensure_habit_baseline(
+    connection: &Connection,
+    habit_id: i64,
+) -> Result<(), ScheduleHistoryError> {
+    connection.execute(
+        "INSERT INTO habit_schedule_revisions (
+            habit_id, revision_no, effective_from, end_date, schedule_type,
+            weekday_mask, interval_days, target_per_period, period_unit,
+            time_zone_id, time_zone_status, source, change_reason
+         )
+         SELECT h.id, 1, h.start_date, h.end_date, h.schedule_type,
+                h.weekday_mask, h.interval_days, h.target_per_period, h.period_unit,
+                h.time_zone_id, 'legacy_unverified', 'legacy',
+                'Imported from the pre-revision schedule fields'
+         FROM habits h
+         WHERE h.id = ?1
+           AND NOT EXISTS (
+               SELECT 1 FROM habit_schedule_revisions r WHERE r.habit_id = h.id
+           )",
+        [habit_id],
+    )?;
+    Ok(())
+}
+
 /// Append an immutable schedule revision.
 ///
 /// The effective date is inclusive. If it is before today, callers must pass
