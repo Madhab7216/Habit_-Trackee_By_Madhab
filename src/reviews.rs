@@ -364,9 +364,7 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     let period_start = gtk::Entry::new();
     period_start.set_width_chars(14);
     period_start.set_placeholder_text(Some("YYYY-MM-DD"));
-    period_start.set_tooltip_text(Some(
-        "Week: Monday start date. Month: first calendar day.",
-    ));
+    period_start.set_tooltip_text(Some("Week: Monday start date. Month: first calendar day."));
     let use_current = gtk::Button::with_label("Current period");
     let load = gtk::Button::with_label("Load");
     period_row.append(&period_kind);
@@ -434,7 +432,11 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     let current_summary = summary.clone();
     let current_feedback = feedback.clone();
     use_current.connect_clicked(move |_| {
-        let kind = if current_kind.selected() == 1 { "month" } else { "week" };
+        let kind = if current_kind.selected() == 1 {
+            "month"
+        } else {
+            "week"
+        };
         match current_period_start(&current_connection.borrow(), kind) {
             Ok(start) => {
                 current_start.set_text(&start);
@@ -450,7 +452,9 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
                     &current_feedback,
                 );
             }
-            Err(error) => current_feedback.set_text(&format!("Could not find current period: {error}")),
+            Err(error) => {
+                current_feedback.set_text(&format!("Could not find current period: {error}"))
+            }
         }
     });
 
@@ -464,7 +468,11 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     let load_summary = summary.clone();
     let load_feedback = feedback.clone();
     load.connect_clicked(move |_| {
-        let kind = if load_kind.selected() == 1 { "month" } else { "week" };
+        let kind = if load_kind.selected() == 1 {
+            "month"
+        } else {
+            "week"
+        };
         refresh_editor(
             &load_connection.borrow(),
             kind,
@@ -548,7 +556,11 @@ mod tests {
         ensure_schema(&db).unwrap();
 
         let review_version: i64 = db
-            .query_row("SELECT MAX(version) FROM review_schema_migrations", [], |row| row.get(0))
+            .query_row(
+                "SELECT MAX(version) FROM review_schema_migrations",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         let core_schema_exists: bool = db
             .query_row(
@@ -564,15 +576,35 @@ mod tests {
     #[test]
     fn saves_updates_and_loads_one_review_per_period() {
         let db = connection();
-        let first = save_review(&db, "week", "2026-11-16", "Walked", "Rain", "Earlier start helps", "Plan walks").unwrap();
-        let second = save_review(&db, "week", "2026-11-16", "Walked twice", "", "", "Keep going").unwrap();
+        let first = save_review(
+            &db,
+            "week",
+            "2026-11-16",
+            "Walked",
+            "Rain",
+            "Earlier start helps",
+            "Plan walks",
+        )
+        .unwrap();
+        let second = save_review(
+            &db,
+            "week",
+            "2026-11-16",
+            "Walked twice",
+            "",
+            "",
+            "Keep going",
+        )
+        .unwrap();
         assert_eq!(first, second);
 
         let stored = load_review(&db, "week", "2026-11-16").unwrap().unwrap();
         assert_eq!(stored.went_well, "Walked twice");
         assert_eq!(stored.next_focus, "Keep going");
 
-        let count: i64 = db.query_row("SELECT COUNT(*) FROM period_reviews", [], |row| row.get(0)).unwrap();
+        let count: i64 = db
+            .query_row("SELECT COUNT(*) FROM period_reviews", [], |row| row.get(0))
+            .unwrap();
         assert_eq!(count, 1);
     }
 
@@ -591,20 +623,37 @@ mod tests {
         let db = connection();
         let too_long = "x".repeat(MAX_NOTE_CHARS + 1);
         assert!(save_review(&db, "week", "2026-11-16", &too_long, "", "", "").is_err());
-        let stored: i64 = db.query_row("SELECT COUNT(*) FROM period_reviews", [], |row| row.get(0)).unwrap();
+        let stored: i64 = db
+            .query_row("SELECT COUNT(*) FROM period_reviews", [], |row| row.get(0))
+            .unwrap();
         assert_eq!(stored, 0);
     }
 
     #[test]
     fn activity_summary_counts_saved_statuses_without_inventing_missed_days() {
         let db = connection();
-        db.execute_batch(include_str!("../migrations/0001_initial.sql")).unwrap();
-        db.execute_batch(include_str!("../migrations/0002_pause_periods.sql")).unwrap();
-        let habit_id: i64 = db.query_row("INSERT INTO habits(name) VALUES ('Test') RETURNING id", [], |row| row.get(0)).unwrap();
+        db.execute_batch(include_str!("../migrations/0001_initial.sql"))
+            .unwrap();
+        db.execute_batch(include_str!("../migrations/0002_pause_periods.sql"))
+            .unwrap();
+        let habit_id: i64 = db
+            .query_row(
+                "INSERT INTO habits(name) VALUES ('Test') RETURNING id",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         db.execute("INSERT INTO habit_entries(habit_id, local_date, status) VALUES (?1, '2026-11-16', 'completed')", [habit_id]).unwrap();
         db.execute("INSERT INTO habit_entries(habit_id, local_date, status) VALUES (?1, '2026-11-17', 'partial')", [habit_id]).unwrap();
         db.execute("INSERT INTO habit_entries(habit_id, local_date, status) VALUES (?1, '2026-11-18', 'skipped')", [habit_id]).unwrap();
         let summary = activity_summary(&db, "week", "2026-11-16").unwrap();
-        assert_eq!(summary, ActivitySummary { completed: 1, partial: 1, skipped: 1 });
+        assert_eq!(
+            summary,
+            ActivitySummary {
+                completed: 1,
+                partial: 1,
+                skipped: 1
+            }
+        );
     }
 }
