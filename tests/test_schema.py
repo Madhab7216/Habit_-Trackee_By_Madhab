@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = [
     ROOT / "migrations" / "0001_initial.sql",
     ROOT / "migrations" / "0002_pause_periods.sql",
+    ROOT / "migrations" / "0004_period_reviews.sql",
 ]
 
 
@@ -27,7 +28,7 @@ class InitialSchemaTests(unittest.TestCase):
             )
         }
         self.assertTrue(
-            {"habits", "habit_entries", "habit_pause_periods", "goals", "settings"}.issubset(
+            {"habits", "habit_entries", "habit_pause_periods", "goals", "settings", "period_reviews"}.issubset(
                 names
             )
         )
@@ -78,6 +79,39 @@ class InitialSchemaTests(unittest.TestCase):
                 "INSERT INTO habit_entries(habit_id, local_date, status) "
                 "VALUES (?, 'not-a-date', 'completed')",
                 (cursor.lastrowid,),
+            )
+
+    def test_period_reviews_enforce_week_and_month_boundaries(self):
+        self.connection.execute(
+            "INSERT INTO period_reviews(period_kind, period_start, went_well) "
+            "VALUES ('week', '2026-11-16', 'Walked regularly')"
+        )
+        self.connection.execute(
+            "INSERT INTO period_reviews(period_kind, period_start) "
+            "VALUES ('month', '2026-11-01')"
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "INSERT INTO period_reviews(period_kind, period_start) "
+                "VALUES ('week', '2026-11-17')"
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "INSERT INTO period_reviews(period_kind, period_start) "
+                "VALUES ('month', '2026-11-02')"
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "INSERT INTO period_reviews(period_kind, period_start) "
+                "VALUES ('week', '2026-11-16')"
+            )
+
+    def test_review_notes_are_length_bounded(self):
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "INSERT INTO period_reviews(period_kind, period_start, lessons) "
+                "VALUES ('week', '2026-11-16', ?)",
+                ("x" * 8001,),
             )
 
     def test_habit_history_is_protected_from_accidental_delete(self):
