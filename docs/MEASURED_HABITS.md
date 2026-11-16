@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The first GTK workflow supported binary completion only, even though the SQLite model already had \`numeric\`, \`count\`, \`duration\` and \`limit\` tracking types. This increment exposes those existing types in the desktop workflow without adding a new database migration.
+The first GTK workflow supported binary completion only, even though the SQLite model already had `numeric`, `count`, `duration` and `limit` tracking types. This increment exposes those existing types in the desktop workflow without adding a new database migration.
 
 ## Supported entry model
 
@@ -16,7 +16,7 @@ The first GTK workflow supported binary completion only, even though the SQLite 
 
 The unit is a short user-defined label (for example, pages, repetitions, minutes or hours). The target must be a finite positive number. Actual values may be zero but cannot be negative, NaN or infinite.
 
-A measured check-in is stored in the existing \`habit_entries.value\` column. The status is \`completed\` when the selected target direction is met; otherwise it is \`partial\`. Saving again on the same local date updates the existing unique habit/date row instead of creating a duplicate. Limit habits always use the at-most direction.
+A measured check-in is stored in the existing `habit_entries.value` column. The status is `completed` when the selected target direction is met; otherwise it is `partial`. Saving again on the same local date updates the existing unique habit/date row instead of creating a duplicate. Limit habits always use the at-most direction.
 
 Weekly frequency remains a session-based workflow: each completed session is a check-in, while the existing weekly quota remains the target. It is not converted into an amount/unit measurement.
 
