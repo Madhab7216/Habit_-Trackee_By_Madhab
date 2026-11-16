@@ -478,6 +478,12 @@ pub fn schedule_for_date(
              FROM habit_schedule_revisions r
              WHERE r.habit_id = ?1
                AND r.effective_from <= ?2
+               AND NOT EXISTS (
+                   SELECT 1 FROM habit_schedule_revisions later
+                   WHERE later.habit_id = r.habit_id
+                     AND later.effective_from > r.effective_from
+                     AND later.effective_from <= ?2
+               )
                AND (r.end_date IS NULL OR r.end_date >= ?2)
              ORDER BY r.effective_from DESC
              LIMIT 1",
@@ -692,6 +698,47 @@ mod tests {
             Recurrence::Weekdays {
                 weekday_mask: 0b001_1111
             }
+        );
+    }
+
+    #[test]
+    fn an_expired_later_revision_does_not_resurrect_an_older_schedule() {
+        let mut connection = memory_connection();
+        let habit_id = add_habit(&connection, "local");
+        initialize(&mut connection).expect("initialize");
+
+        let temporary = revision(
+            date(2026, 11, 10),
+            Recurrence::Weekdays {
+                weekday_mask: 0b001_1111,
+            },
+            "Asia/Kolkata",
+            Some(date(2026, 11, 12)),
+        );
+        append_revision(
+            &mut connection,
+            habit_id,
+            &temporary,
+            date(2026, 11, 5),
+            PastEditConfirmation::NotConfirmed,
+        )
+        .expect("append a temporary revision");
+
+        let baseline = schedule_for_date(&mut connection, habit_id, date(2026, 11, 9))
+            .expect("query baseline")
+            .expect("baseline remains active before next revision");
+        assert_eq!(baseline.revision_no, 1);
+
+        let active = schedule_for_date(&mut connection, habit_id, date(2026, 11, 12))
+            .expect("query temporary revision")
+            .expect("temporary revision applies through its inclusive end date");
+        assert_eq!(active.revision_no, 2);
+
+        assert!(
+            schedule_for_date(&mut connection, habit_id, date(2026, 11, 13))
+                .expect("query after temporary revision")
+                .is_none(),
+            "the old baseline must not become active again after revision 2 expires"
         );
     }
 
