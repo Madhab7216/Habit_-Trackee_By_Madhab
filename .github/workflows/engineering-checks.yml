@@ -53,3 +53,4 @@ jobs:
         with:
           persist-credentials: false
       - run: bash -n scripts/audit-linux-mint.sh
+      - run: bash -n scripts/apply-branch-protection.sh
