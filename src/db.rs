@@ -265,9 +265,6 @@ pub fn change_habit_schedule(
             "schedule changes must take effect on a future local date".to_string(),
         ));
     }
-    HabitSchedule::new(cadence, effective_from, None)
-        .map_err(|_| invalid_schedule_field("new schedule"))?;
-
     let (schedule_type, weekday_mask, interval_days, target_per_period) =
         cadence_to_columns(cadence);
     let transaction = connection.unchecked_transaction()?;
@@ -281,22 +278,29 @@ pub fn change_habit_schedule(
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
-    let current: Option<(i64, String, String)> = transaction
+    let current: Option<(i64, String, String, Option<String>)> = transaction
         .query_row(
-            "SELECT id, effective_from_date, time_zone_id
+            "SELECT id, effective_from_date, time_zone_id, schedule_end_date
              FROM habit_schedule_revisions
              WHERE habit_id = ?1 AND effective_until_date IS NULL
              ORDER BY effective_from_date DESC
              LIMIT 1",
             [habit_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()?;
 
-    let (current_id, current_from_text, time_zone_id) =
+    let (current_id, current_from_text, time_zone_id, end_text) =
         current.ok_or_else(|| invalid_schedule_field("missing open schedule revision"))?;
     let current_from = parse_civil_date(&current_from_text)
         .ok_or_else(|| invalid_schedule_field("effective_from_date"))?;
+    let schedule_end = end_text
+        .map(|value| {
+            parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("schedule_end_date"))
+        })
+        .transpose()?;
+    HabitSchedule::new(cadence, effective_from, schedule_end)
+        .map_err(|_| invalid_schedule_field("new schedule bounds"))?;
 
     if effective_from < current_from {
         return Err(rusqlite::Error::InvalidParameterName(
@@ -310,7 +314,7 @@ pub fn change_habit_schedule(
         transaction.execute(
             "UPDATE habit_schedule_revisions
              SET schedule_type = ?1, weekday_mask = ?2, interval_days = ?3,
-                 target_per_period = ?4, period_unit = 'week', schedule_end_date = NULL
+                 target_per_period = ?4, period_unit = 'week'
              WHERE id = ?5 AND effective_until_date IS NULL",
             params![
                 schedule_type,
@@ -333,7 +337,7 @@ pub fn change_habit_schedule(
                 interval_days, target_per_period, period_unit, schedule_end_date,
                 time_zone_id
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'week', NULL, ?7)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'week', ?7, ?8)",
             params![
                 habit_id,
                 effective_from.to_string(),
@@ -341,6 +345,7 @@ pub fn change_habit_schedule(
                 weekday_mask,
                 interval_days,
                 target_per_period,
+                schedule_end.map(|date| date.to_string()),
                 time_zone_id
             ],
         )?;
@@ -1000,6 +1005,37 @@ mod tests {
             )
             .expect("count revisions");
         assert_eq!(revision_count, 2);
+    }
+
+    #[test]
+    fn future_schedule_change_preserves_the_existing_schedule_end_date() {
+        let connection = memory_connection();
+        let end_text: String = connection
+            .query_row("SELECT date('now', 'localtime', '+3 day')", [], |row| row.get(0))
+            .expect("read schedule end date");
+        let end = parse_civil_date(&end_text).expect("parse schedule end date");
+        connection.execute(
+            "INSERT INTO habits(name, start_date, end_date)
+             VALUES ('Seasonal habit', date('now', 'localtime'), ?1)",
+            [end_text],
+        ).expect("insert habit with an end date");
+        let habit_id = connection.last_insert_rowid();
+        let from_text: String = connection
+            .query_row("SELECT date('now', 'localtime', '+1 day')", [], |row| row.get(0))
+            .expect("read future effective date");
+        let from = parse_civil_date(&from_text).expect("parse future effective date");
+
+        change_habit_schedule(
+            &connection,
+            habit_id,
+            Cadence::Weekdays { weekday_mask: 0b001_1111 },
+            from,
+        ).expect("change future schedule");
+
+        let schedule = habit_schedule_for_date(&connection, habit_id, from)
+            .expect("read new schedule")
+            .expect("new schedule exists");
+        assert_eq!(schedule.end(), Some(end));
     }
 
     #[test]
