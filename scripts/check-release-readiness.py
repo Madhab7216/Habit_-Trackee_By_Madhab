@@ -148,7 +148,7 @@ def inspect_release(root: Path, candidate_ref: str) -> list[str]:
     if sbom_validator.is_file():
         validator_text = sbom_validator.read_text(encoding="utf-8")
         expected_version = re.search(
-            r'^EXPECTED_VERSION\\s*=\\s*["\\\']([^"\\\']+)["\\\']',
+            r"""^EXPECTED_VERSION\s*=\s*["']([^"']+)["']""",
             validator_text,
             re.MULTILINE,
         )
