@@ -512,7 +512,10 @@ fn row_to_revision(row: &Row<'_>) -> rusqlite::Result<ScheduleRevision> {
         rusqlite::Error::FromSqlConversionFailure(
             10,
             Type::Text,
-            Box::new(io::Error::new(io::ErrorKind::InvalidData, error.to_string())),
+            Box::new(io::Error::new(
+                io::ErrorKind::InvalidData,
+                error.to_string(),
+            )),
         )
     })?;
 
