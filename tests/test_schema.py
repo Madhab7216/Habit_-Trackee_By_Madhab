@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = [
     ROOT / "migrations" / "0001_initial.sql",
     ROOT / "migrations" / "0002_pause_periods.sql",
+    ROOT / "migrations" / "0003_schedule_revisions.sql",
 ]
 
 
@@ -27,10 +28,98 @@ class InitialSchemaTests(unittest.TestCase):
             )
         }
         self.assertTrue(
-            {"habits", "habit_entries", "habit_pause_periods", "goals", "settings"}.issubset(
+            {"habits", "habit_entries", "habit_pause_periods", "habit_schedule_revisions", "goals", "settings"}.issubset(
                 names
             )
         )
+
+
+    def test_new_habit_seeds_an_initial_schedule_revision(self):
+        cursor = self.connection.execute(
+            "INSERT INTO habits(name, schedule_type, weekday_mask, start_date) "
+            "VALUES ('Walk', 'weekdays', 31, '2026-11-01')"
+        )
+        row = self.connection.execute(
+            "SELECT effective_from_date, effective_until_date, schedule_type, weekday_mask "
+            "FROM habit_schedule_revisions WHERE habit_id = ?",
+            (cursor.lastrowid,),
+        ).fetchone()
+        self.assertEqual(row, ("2026-11-01", None, "weekdays", 31))
+
+    def test_schedule_revisions_cannot_overlap(self):
+        cursor = self.connection.execute(
+            "INSERT INTO habits(name, start_date) VALUES ('Read', '2026-11-01')"
+        )
+        habit_id = cursor.lastrowid
+        self.connection.execute(
+            "UPDATE habit_schedule_revisions SET effective_until_date = '2026-11-20' "
+            "WHERE habit_id = ?",
+            (habit_id,),
+        )
+        self.connection.execute(
+            "INSERT INTO habit_schedule_revisions "
+            "(habit_id, effective_from_date, schedule_type) "
+            "VALUES (?, '2026-11-20', 'daily')",
+            (habit_id,),
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "INSERT INTO habit_schedule_revisions "
+                "(habit_id, effective_from_date, effective_until_date, schedule_type) "
+                "VALUES (?, '2026-11-19', '2026-11-21', 'daily')",
+                (habit_id,),
+            )
+
+    def test_effective_schedule_and_legacy_schedule_fields_are_immutable(self):
+        cursor = self.connection.execute(
+            "INSERT INTO habits(name, start_date) VALUES ('Journal', '2026-11-01')"
+        )
+        habit_id = cursor.lastrowid
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "UPDATE habit_schedule_revisions SET schedule_type = 'weekdays', "
+                "weekday_mask = 1 WHERE habit_id = ?",
+                (habit_id,),
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "DELETE FROM habit_schedule_revisions WHERE habit_id = ?",
+                (habit_id,),
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1 "
+                "WHERE id = ?",
+                (habit_id,),
+            )
+
+    def test_schedule_revision_migration_backfills_existing_habits(self):
+        connection = sqlite3.connect(":memory:")
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.executescript(
+            (ROOT / "migrations" / "0001_initial.sql").read_text(encoding="utf-8")
+        )
+        connection.executescript(
+            (ROOT / "migrations" / "0002_pause_periods.sql").read_text(encoding="utf-8")
+        )
+        cursor = connection.execute(
+            "INSERT INTO habits(name, schedule_type, interval_days, start_date, end_date) "
+            "VALUES ('Stretch', 'every_n_days', 3, '2026-11-01', '2026-12-31')"
+        )
+        connection.executescript(
+            (ROOT / "migrations" / "0003_schedule_revisions.sql").read_text(encoding="utf-8")
+        )
+        row = connection.execute(
+            "SELECT effective_from_date, effective_until_date, schedule_type, "
+            "interval_days, schedule_end_date "
+            "FROM habit_schedule_revisions WHERE habit_id = ?",
+            (cursor.lastrowid,),
+        ).fetchone()
+        self.assertEqual(
+            row,
+            ("2026-11-01", None, "every_n_days", 3, "2026-12-31"),
+        )
+        connection.close()
 
     def test_habit_can_be_created_and_completed_once_per_day(self):
         cursor = self.connection.execute(
