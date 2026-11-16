@@ -41,17 +41,5 @@ jobs:
       - name: Validate AppStream metainfo
         run: appstreamcli validate --pedantic packaging/org.madhab.habittracker.metainfo.xml
 
-      - name: Validate icon XML
-        run: |
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          path = Path("packaging/icons/hicolor/scalable/apps/org.madhab.habittracker.svg")
-          root = ET.parse(path).getroot()
-          if root.tag != "{http://www.w3.org/2000/svg}svg":
-              raise SystemExit("Application icon must be a valid SVG document")
-          if root.attrib.get("viewBox") != "0 0 512 512":
-              raise SystemExit("Application icon must use the expected scalable 512x512 viewBox")
-          print(f"Validated {path}")
-          PY
+      - name: Check launcher, AppStream, icon and Cargo references agree
+        run: python3 scripts/validate-desktop-metadata.py
