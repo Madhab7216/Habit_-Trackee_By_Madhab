@@ -434,8 +434,7 @@ mod tests {
             .execute_batch("PRAGMA foreign_keys = ON;")
             .expect("enable foreign keys");
         migrate(&mut connection).expect("apply migrations");
-        crate::schedule_history::initialize(&mut connection)
-            .expect("initialize schedule history");
+        crate::schedule_history::initialize(&mut connection).expect("initialize schedule history");
         connection
     }
 
@@ -499,8 +498,7 @@ mod tests {
     #[test]
     fn create_habit_creates_a_baseline_schedule_revision_atomically() {
         let connection = memory_connection();
-        create_habit_with_cadence(&connection, "Journal", Cadence::Daily)
-            .expect("create habit");
+        create_habit_with_cadence(&connection, "Journal", Cadence::Daily).expect("create habit");
         let row: (String, String, String, i64) = connection
             .query_row(
                 "SELECT r.schedule_type, r.time_zone_status, r.source, r.revision_no
