@@ -275,7 +275,6 @@ fn note_field(title: &str, hint: &str) -> (gtk::Box, gtk::TextView) {
     view.set_top_margin(8);
     view.set_bottom_margin(8);
     view.set_tooltip_text(Some(hint));
-    view.set_accessible_role(gtk::AccessibleRole::TextBox);
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_min_content_height(86);
     scroller.set_child(Some(&view));
