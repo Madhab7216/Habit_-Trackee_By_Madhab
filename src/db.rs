@@ -249,7 +249,6 @@ pub fn create_habit_with_cadence(
     Ok(())
 }
 
-
 /// Add or replace a future-effective schedule revision without rewriting past rules.
 ///
 /// A revision takes effect on effective_from (inclusive). Existing history is closed
@@ -356,30 +355,36 @@ pub fn habit_schedule_for_date(
     habit_id: i64,
     date: CivilDate,
 ) -> Result<Option<HabitSchedule>> {
-    let revision: Option<(String, Option<i64>, Option<i64>, Option<i64>, String, Option<String>)> =
-        connection
-            .query_row(
-                "SELECT schedule_type, weekday_mask, interval_days, target_per_period,
-                        effective_from_date, schedule_end_date
-                 FROM habit_schedule_revisions
-                 WHERE habit_id = ?1
-                   AND effective_from_date <= ?2
-                   AND (effective_until_date IS NULL OR ?2 < effective_until_date)
-                 ORDER BY effective_from_date DESC
-                 LIMIT 1",
-                params![habit_id, date.to_string()],
-                |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                        row.get(5)?,
-                    ))
-                },
-            )
-            .optional()?;
+    let revision: Option<(
+        String,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        String,
+        Option<String>,
+    )> = connection
+        .query_row(
+            "SELECT schedule_type, weekday_mask, interval_days, target_per_period,
+                    effective_from_date, schedule_end_date
+             FROM habit_schedule_revisions
+             WHERE habit_id = ?1
+               AND effective_from_date <= ?2
+               AND (effective_until_date IS NULL OR ?2 < effective_until_date)
+             ORDER BY effective_from_date DESC
+             LIMIT 1",
+            params![habit_id, date.to_string()],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .optional()?;
 
     let Some((kind, weekday_mask, interval_days, target, start_text, end_text)) = revision else {
         return Ok(None);
@@ -554,24 +559,11 @@ fn cadence_from_values(
 fn cadence_to_columns(cadence: Cadence) -> (&'static str, Option<i64>, Option<i64>, Option<i64>) {
     match cadence {
         Cadence::Daily => ("daily", None, None, None),
-        Cadence::Weekdays { weekday_mask } => (
-            "weekdays",
-            Some(i64::from(weekday_mask)),
-            None,
-            None,
-        ),
-        Cadence::EveryNDays { interval } => (
-            "every_n_days",
-            None,
-            Some(i64::from(interval)),
-            None,
-        ),
-        Cadence::TimesPerWeek { target } => (
-            "times_per_week",
-            None,
-            None,
-            Some(i64::from(target)),
-        ),
+        Cadence::Weekdays { weekday_mask } => {
+            ("weekdays", Some(i64::from(weekday_mask)), None, None)
+        }
+        Cadence::EveryNDays { interval } => ("every_n_days", None, Some(i64::from(interval)), None),
+        Cadence::TimesPerWeek { target } => ("times_per_week", None, None, Some(i64::from(target))),
     }
 }
 
@@ -954,7 +946,9 @@ mod tests {
 
         let today = local_today(&connection).expect("read current local date");
         let future_text: String = connection
-            .query_row("SELECT date('now', 'localtime', '+1 day')", [], |row| row.get(0))
+            .query_row("SELECT date('now', 'localtime', '+1 day')", [], |row| {
+                row.get(0)
+            })
             .expect("read next local date");
         let future = parse_civil_date(&future_text).expect("parse next local date");
         let next_weekday = 1_u8 << future.weekday_monday_zero();
@@ -962,9 +956,12 @@ mod tests {
         change_habit_schedule(
             &connection,
             habit_id,
-            Cadence::Weekdays { weekday_mask: next_weekday },
+            Cadence::Weekdays {
+                weekday_mask: next_weekday,
+            },
             future,
-        ).expect("schedule future weekday rule");
+        )
+        .expect("schedule future weekday rule");
 
         let old_schedule = habit_schedule_for_date(&connection, habit_id, today)
             .expect("read old schedule")
@@ -974,14 +971,20 @@ mod tests {
         let future_schedule = habit_schedule_for_date(&connection, habit_id, future)
             .expect("read future schedule")
             .expect("future schedule exists");
-        assert_eq!(future_schedule.cadence(), Cadence::Weekdays { weekday_mask: next_weekday });
+        assert_eq!(
+            future_schedule.cadence(),
+            Cadence::Weekdays {
+                weekday_mask: next_weekday
+            }
+        );
 
         change_habit_schedule(
             &connection,
             habit_id,
             Cadence::EveryNDays { interval: 2 },
             future,
-        ).expect("replace still-future revision");
+        )
+        .expect("replace still-future revision");
         let replaced = habit_schedule_for_date(&connection, habit_id, future)
             .expect("read replaced schedule")
             .expect("replaced schedule exists");
@@ -1019,11 +1022,13 @@ mod tests {
     #[test]
     fn persisted_weekday_schedule_only_marks_selected_days() {
         let connection = memory_connection();
-        connection.execute(
-            "INSERT INTO habits(name, schedule_type, weekday_mask, start_date)
-             VALUES ('Walk', 'weekdays', 1, '2026-11-01')",
-            [],
-        ).expect("insert Monday-only schedule");
+        connection
+            .execute(
+                "INSERT INTO habits(name, schedule_type, weekday_mask, start_date)
+                 VALUES ('Walk', 'weekdays', 1, '2026-11-01')",
+                [],
+            )
+            .expect("insert Monday-only schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 16)).unwrap()[0].scheduled);
         assert!(!habits_for_date(&connection, date(2026, 11, 15)).unwrap()[0].scheduled);
@@ -1032,11 +1037,13 @@ mod tests {
     #[test]
     fn every_n_days_uses_start_anchor_and_date_bounds() {
         let connection = memory_connection();
-        connection.execute(
-            "INSERT INTO habits(name, schedule_type, interval_days, start_date, end_date)
-             VALUES ('Stretch', 'every_n_days', 2, '2026-11-01', '2026-11-10')",
-            [],
-        ).expect("insert every-two-days schedule");
+        connection
+            .execute(
+                "INSERT INTO habits(name, schedule_type, interval_days, start_date, end_date)
+                 VALUES ('Stretch', 'every_n_days', 2, '2026-11-01', '2026-11-10')",
+                [],
+            )
+            .expect("insert every-two-days schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 3)).unwrap()[0].scheduled);
         assert!(!habits_for_date(&connection, date(2026, 11, 4)).unwrap()[0].scheduled);
@@ -1047,11 +1054,13 @@ mod tests {
     #[test]
     fn weekly_frequency_uses_a_monday_anchored_evaluation_period() {
         let connection = memory_connection();
-        connection.execute(
-            "INSERT INTO habits(name, schedule_type, target_per_period, period_unit, start_date)
-             VALUES ('Practice piano', 'times_per_week', 3, 'week', '2026-11-01')",
-            [],
-        ).expect("insert times-per-week schedule");
+        connection
+            .execute(
+                "INSERT INTO habits(name, schedule_type, target_per_period, period_unit, start_date)
+                 VALUES ('Practice piano', 'times_per_week', 3, 'week', '2026-11-01')",
+                [],
+            )
+            .expect("insert times-per-week schedule");
 
         assert!(habits_for_date(&connection, date(2026, 11, 9)).unwrap()[0].scheduled);
         assert!(habits_for_date(&connection, date(2026, 11, 14)).unwrap()[0].scheduled);
@@ -1060,11 +1069,13 @@ mod tests {
     #[test]
     fn unscheduled_checkins_are_rejected_and_due_checkins_are_saved() {
         let connection = memory_connection();
-        connection.execute(
-            "INSERT INTO habits(name, schedule_type, weekday_mask, start_date)
-             VALUES ('Read', 'weekdays', 1, '2026-11-01')",
-            [],
-        ).expect("insert Monday-only schedule");
+        connection
+            .execute(
+                "INSERT INTO habits(name, schedule_type, weekday_mask, start_date)
+                 VALUES ('Read', 'weekdays', 1, '2026-11-01')",
+                [],
+            )
+            .expect("insert Monday-only schedule");
         let habit_id = connection.last_insert_rowid();
 
         assert!(set_completed_for_date(&connection, habit_id, true, date(2026, 11, 15)).is_err());
