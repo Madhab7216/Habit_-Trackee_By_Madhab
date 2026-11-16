@@ -302,7 +302,9 @@ fn refresh_editor(
     let review = match load_review(connection, kind, start) {
         Ok(review) => review,
         Err(error) => {
-            widgets.feedback.set_text(&format!("Could not load review: {error}"));
+            widgets
+                .feedback
+                .set_text(&format!("Could not load review: {error}"));
             return;
         }
     };
@@ -313,14 +315,18 @@ fn refresh_editor(
             set_text(widgets.challenges, &review.challenges);
             set_text(widgets.lessons, &review.lessons);
             set_text(widgets.next_focus, &review.next_focus);
-            widgets.feedback.set_text("Saved review loaded from this device.");
+            widgets
+                .feedback
+                .set_text("Saved review loaded from this device.");
         }
         None => {
             set_text(widgets.wins, "");
             set_text(widgets.challenges, "");
             set_text(widgets.lessons, "");
             set_text(widgets.next_focus, "");
-            widgets.feedback.set_text("No review saved for this period yet.");
+            widgets
+                .feedback
+                .set_text("No review saved for this period yet.");
         }
     }
 
@@ -483,7 +489,12 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
             summary: &load_summary,
             feedback: &load_feedback,
         };
-        refresh_editor(&load_connection.borrow(), kind, &load_start.text(), &widgets);
+        refresh_editor(
+            &load_connection.borrow(),
+            kind,
+            &load_start.text(),
+            &widgets,
+        );
     });
 
     let save_connection = Rc::clone(&connection);
