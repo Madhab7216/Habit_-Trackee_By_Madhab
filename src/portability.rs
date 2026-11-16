@@ -511,7 +511,7 @@ mod tests {
         let restored_path = temp_path("restored.sqlite3");
 
         create_verified_backup(&source, &backup_path).expect("create verified backup");
-        assert_eq!(verify_backup_file(&backup_path).unwrap(), 2);
+        assert_eq!(verify_backup_file(&backup_path).unwrap(), 3);
 
         restore_backup_to_new_file(&backup_path, &restored_path)
             .expect("restore into a new database file");
@@ -528,6 +528,13 @@ mod tests {
                 row.get(0)
             })
             .expect("count restored pause periods");
+        let schedule_revision_count: i64 = restored
+            .query_row(
+                "SELECT COUNT(*) FROM habit_schedule_revisions",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count restored schedule revisions");
         let goal_count: i64 = restored
             .query_row("SELECT COUNT(*) FROM goals", [], |row| row.get(0))
             .expect("count restored goals");
@@ -538,6 +545,7 @@ mod tests {
         assert_eq!(habit_name, "Drink \"water\", slowly\nand consistently");
         assert_eq!(entry_count, 1);
         assert_eq!(pause_count, 1);
+        assert_eq!(schedule_revision_count, 1);
         assert_eq!(goal_count, 1);
         assert_eq!(milestone_count, 1);
         drop(restored);
