@@ -921,8 +921,7 @@ mod tests {
         export_csv_bundle_raw(&mut source, &destination).expect("create raw export");
 
         let habits = fs::read_to_string(destination.join("habits.csv")).expect("read habits CSV");
-        let manifest =
-            fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
+        let manifest = fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
 
         assert!(habits.contains(",=1+1,  +SUM(1,1),"));
         assert!(manifest.contains("csv_mode=lossless_raw"));
