@@ -321,10 +321,7 @@ mod tests {
             ReminderSchedule::new(time(8, 0), 0b0000_0001, 181),
             Err(ReminderConfigError::InvalidGracePeriod)
         );
-        assert_eq!(
-            LocalTime::new(24, 0),
-            Err(ReminderConfigError::InvalidTime)
-        );
+        assert_eq!(LocalTime::new(24, 0), Err(ReminderConfigError::InvalidTime));
     }
 
     #[test]
