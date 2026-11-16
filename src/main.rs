@@ -407,8 +407,10 @@ fn refresh_list(
             };
             let status = Label::new(Some(status_text));
             status.add_css_class("dim-label");
+            row_content.append(&status);
 
             let edit_button = Button::with_label("Edit");
+            edit_button.set_tooltip_text(Some("Edit the habit name"));
             let edit_state = Rc::clone(state);
             let edit_list = list.clone();
             let edit_parent = parent.clone();
@@ -517,7 +519,6 @@ fn refresh_list(
                 refresh_list(&archive_list, &archive_state, &archive_parent, false);
             });
 
-            row_content.append(&status);
             row_content.append(&edit_button);
             row_content.append(&pause_action);
             row_content.append(&archive_action);
