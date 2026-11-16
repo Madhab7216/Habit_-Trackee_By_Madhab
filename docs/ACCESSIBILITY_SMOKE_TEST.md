@@ -24,7 +24,7 @@ A passing AT-SPI snapshot is not a full accessibility certification. It does not
 - Bengali font shaping, translation completeness or visual layout;
 - every dialog and every screen added by separate feature branches.
 
-The Today form associates each input with a visible GTK label through the `LabelledBy` accessibility relation. The CI assertion checks the field names and expected AT-SPI roles; it does not replace checking their announcement order or pronunciation with Orca.
+The Today form uses GTK labels with explicit mnemonic targets. GTK automatically updates the target control's `LabelledBy` accessibility relation when a label is associated with its mnemonic widget. The labels also provide keyboard accelerators (Alt+H, Alt+S and Alt+W). The same association is applied in the Edit habit dialog. The CI assertion checks the field names and expected AT-SPI roles; it does not replace checking their announcement order or pronunciation with Orca.
 
 Those behaviours still need manual validation on the target Linux Mint workstation.
 
