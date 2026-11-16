@@ -497,6 +497,32 @@ mod tests {
     }
 
     #[test]
+    fn create_habit_creates_a_baseline_schedule_revision_atomically() {
+        let connection = memory_connection();
+        create_habit_with_cadence(&connection, "Journal", Cadence::Daily)
+            .expect("create habit");
+        let row: (String, String, String, i64) = connection
+            .query_row(
+                "SELECT r.schedule_type, r.time_zone_status, r.source, r.revision_no
+                 FROM habit_schedule_revisions r
+                 JOIN habits h ON h.id = r.habit_id
+                 WHERE h.name = 'Journal'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("read schedule history baseline");
+        assert_eq!(
+            row,
+            (
+                "daily".to_string(),
+                "legacy_unverified".to_string(),
+                "legacy".to_string(),
+                1,
+            )
+        );
+    }
+
+    #[test]
     fn create_habit_persists_weekly_frequency_target() {
         let connection = memory_connection();
         create_habit_with_cadence(&connection, "Workout", Cadence::TimesPerWeek { target: 3 })
