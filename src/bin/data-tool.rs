@@ -26,7 +26,13 @@ fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
         [_, command, destination] if command == "export-csv" => {
             let mut connection = db::open()?;
             portability::export_csv_bundle(&mut connection, Path::new(destination))?;
-            println!("CSV export created and synced to: {destination}");
+            println!("Spreadsheet-safe CSV export created and synced to: {destination}");
+        }
+        [_, command, destination] if command == "export-csv-raw" => {
+            let mut connection = db::open()?;
+            portability::export_csv_bundle_raw(&mut connection, Path::new(destination))?;
+            println!("Lossless raw CSV export created: {destination}");
+            eprintln!("Warning: raw CSV text is not neutralized against spreadsheet formulas.");
         }
         [_, command, destination] if command == "backup" => {
             let connection = db::open()?;
@@ -64,6 +70,7 @@ fn print_usage() {
 
 Usage:
   madhab-data-tool export-csv <new-output-directory>
+  madhab-data-tool export-csv-raw <new-output-directory>
   madhab-data-tool backup <new-backup-file>
   madhab-data-tool verify <backup-file>
   madhab-data-tool restore <backup-file> <new-database-file>
@@ -71,6 +78,8 @@ Usage:
 Safety:
   - Existing destination files/directories are never overwritten.
   - Restore writes a separate new database; it never replaces the active database.
+  - export-csv neutralizes formula-like text for spreadsheet viewing.
+  - export-csv-raw preserves exact text and must only be opened in trusted workflows.
   - All operations are local and do not upload your habit data."
     );
 }
