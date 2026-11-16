@@ -101,13 +101,8 @@ fn build_ui(application: &Application) {
     primary_form.append(&weekly_target);
 
     let detail_form = gtk::Box::new(Orientation::Horizontal, 8);
-    let tracking_picker = gtk::DropDown::from_strings(&[
-        "Binary",
-        "Number",
-        "Count",
-        "Duration",
-        "Limit",
-    ]);
+    let tracking_picker =
+        gtk::DropDown::from_strings(&["Binary", "Number", "Count", "Duration", "Limit"]);
     tracking_picker.set_selected(0);
     tracking_picker.set_tooltip_text(Some("Choose how progress is measured"));
     let tracking_group = gtk::Box::new(Orientation::Vertical, 2);
@@ -133,7 +128,9 @@ fn build_ui(application: &Application) {
 
     let direction_picker = gtk::DropDown::from_strings(&["At least", "At most"]);
     direction_picker.set_selected(0);
-    direction_picker.set_tooltip_text(Some("Whether progress should meet or stay under the target"));
+    direction_picker.set_tooltip_text(Some(
+        "Whether progress should meet or stay under the target",
+    ));
     let direction_group = gtk::Box::new(Orientation::Vertical, 2);
     direction_group.append(&Label::new(Some("Target direction")));
     direction_group.append(&direction_picker);
