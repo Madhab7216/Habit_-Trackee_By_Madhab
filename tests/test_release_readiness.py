@@ -98,7 +98,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_license_file_field_is_respected(self) -> None:
         manifest = self.root / "Cargo.toml"
         manifest.write_text(
-            '[package]\nname = "habit-trackers-by-madhab"\nversion = "0.1.0"\nlicense = "MIT"\nlicense-file = "licenses/APP-LICENSE.txt"\n',
+            '[package]\nname = "habit-trackers-by-madhab"\nversion = "0.1.0"\nlicense-file = "licenses/APP-LICENSE.txt"\n',
             encoding="utf-8",
         )
         (self.root / "LICENSE").unlink()
