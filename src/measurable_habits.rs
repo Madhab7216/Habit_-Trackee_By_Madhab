@@ -8,7 +8,7 @@ use crate::{
     db::{self, TodayHabit},
     domain::{achievement_ratio, Cadence, CivilDate, Direction},
 };
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::{error::Error, fmt};
 
 const MAX_UNIT_CHARS: usize = 24;
@@ -551,7 +551,8 @@ mod tests {
             ));
         }
 
-        for unit in ["", "   ", "a".repeat(25).as_str(), "bad\nunit"] {
+        let long_unit = "a".repeat(25);
+        for unit in ["", "   ", long_unit.as_str(), "bad\nunit"] {
             let invalid = spec(
                 MeasurementKind::Numeric,
                 MeasurementDirection::AtLeast,
