@@ -164,8 +164,9 @@ pub fn verify_database(connection: &Connection) -> PortabilityResult<i64> {
         )?;
         if !has_schedule_history {
             return Err(invalid_data(
-                "schema version 3 database is missing habit_schedule_revisions"
-            ).into());
+                "schema version 3 database is missing habit_schedule_revisions",
+            )
+            .into());
         }
     }
 
