@@ -287,7 +287,31 @@ pub fn restore_backup_to_new_file(backup_path: &Path, destination: &Path) -> Por
 ///
 /// A read transaction gives every CSV file the same logical database snapshot.
 /// Null values become empty fields; BLOB values are written as lowercase hex.
+/// Export a spreadsheet-safe CSV bundle by neutralizing formula-like text cells.
+///
+/// Values changed by this export are marked in the manifest. Use
+/// `export_csv_bundle_raw` when exact, machine-readable text preservation is required.
 pub fn export_csv_bundle(source: &mut Connection, destination: &Path) -> PortabilityResult<()> {
+    export_csv_bundle_with_mode(source, destination, true)
+}
+
+/// Export an exact, lossless CSV snapshot.
+///
+/// This mode intentionally does not neutralize spreadsheet formulas. Only use it for
+/// trusted data-processing workflows; prefer the default spreadsheet-safe export when
+/// a person will open the files in Excel, LibreOffice Calc or another spreadsheet.
+pub fn export_csv_bundle_raw(
+    source: &mut Connection,
+    destination: &Path,
+) -> PortabilityResult<()> {
+    export_csv_bundle_with_mode(source, destination, false)
+}
+
+fn export_csv_bundle_with_mode(
+    source: &mut Connection,
+    destination: &Path,
+    spreadsheet_safe: bool,
+) -> PortabilityResult<()> {
     ensure_parent_directory(destination)?;
     create_private_directory(destination)?;
 
@@ -299,12 +323,17 @@ pub fn export_csv_bundle(source: &mut Connection, destination: &Path) -> Portabi
         for table in EXPORT_TABLES {
             if table_exists(&transaction, table)? {
                 let filename = format!("{table}.csv");
-                export_table(&transaction, table, &destination.join(&filename))?;
+                export_table(
+                    &transaction,
+                    table,
+                    &destination.join(&filename),
+                    spreadsheet_safe,
+                )?;
                 exported_files.push(filename);
             }
         }
 
-        write_manifest(destination, version, &exported_files)?;
+        write_manifest(destination, version, &exported_files, spreadsheet_safe)?;
         transaction.commit()?;
         Ok(())
     })();
@@ -327,7 +356,12 @@ fn table_exists(connection: &Connection, table: &str) -> rusqlite::Result<bool> 
     )
 }
 
-fn export_table(connection: &Connection, table: &str, destination: &Path) -> PortabilityResult<()> {
+fn export_table(
+    connection: &Connection,
+    table: &str,
+    destination: &Path,
+    spreadsheet_safe: bool,
+) -> PortabilityResult<()> {
     // Table names come only from EXPORT_TABLES above, never from user input.
     let sql = format!("SELECT * FROM \"{table}\" ORDER BY 1");
     let mut statement = connection.prepare(&sql)?;
@@ -344,17 +378,40 @@ fn export_table(connection: &Connection, table: &str, destination: &Path) -> Por
     let mut rows = statement.query([])?;
     while let Some(row) = rows.next()? {
         let mut fields = Vec::with_capacity(column_count);
+        let mut force_quotes = Vec::with_capacity(column_count);
         for index in 0..column_count {
             let value = row.get_ref(index)?;
             fields.push(match value {
-                ValueRef::Null => String::new(),
-                ValueRef::Integer(number) => number.to_string(),
-                ValueRef::Real(number) => number.to_string(),
-                ValueRef::Text(bytes) => String::from_utf8_lossy(bytes).into_owned(),
-                ValueRef::Blob(bytes) => bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
+                ValueRef::Null => {
+                    force_quotes.push(false);
+                    String::new()
+                }
+                ValueRef::Integer(number) => {
+                    force_quotes.push(false);
+                    number.to_string()
+                }
+                ValueRef::Real(number) => {
+                    force_quotes.push(false);
+                    number.to_string()
+                }
+                ValueRef::Text(bytes) => {
+                    let text = String::from_utf8_lossy(bytes).into_owned();
+                    if spreadsheet_safe {
+                        let (safe_text, must_quote) = spreadsheet_safe_text(&text);
+                        force_quotes.push(must_quote);
+                        safe_text
+                    } else {
+                        force_quotes.push(false);
+                        text
+                    }
+                }
+                ValueRef::Blob(bytes) => {
+                    force_quotes.push(false);
+                    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+                }
             });
         }
-        write_csv_record(&mut writer, &fields)?;
+        write_csv_record_with_quote_flags(&mut writer, &fields, &force_quotes)?;
     }
 
     writer.flush()?;
@@ -362,15 +419,45 @@ fn export_table(connection: &Connection, table: &str, destination: &Path) -> Por
     Ok(())
 }
 
+/// Return a spreadsheet-oriented representation of untrusted text.
+///
+/// OWASP documents tab-prefixing formula-leading cells as an Excel-resistant mitigation
+/// (with a data-fidelity trade-off). Leading control characters use an apostrophe prefix.
+/// This is defense in depth, not a universal guarantee across every spreadsheet program.
+fn spreadsheet_safe_text(value: &str) -> (String, bool) {
+    if matches!(value.chars().next(), Some('\\t' | '\\r' | '\\n')) {
+        return (format!("'{value}"), true);
+    }
+
+    let first_non_whitespace = value.trim_start().chars().next();
+    if matches!(
+        first_non_whitespace,
+        Some('=' | '+' | '-' | '@' | '＝' | '＋' | '－' | '＠')
+    ) {
+        return (format!("\\t{value}"), true);
+    }
+
+    (value.to_owned(), false)
+}
+
 fn write_csv_record(writer: &mut impl Write, fields: &[String]) -> io::Result<()> {
+    write_csv_record_with_quote_flags(writer, fields, &[])
+}
+
+fn write_csv_record_with_quote_flags(
+    writer: &mut impl Write,
+    fields: &[String],
+    force_quotes: &[bool],
+) -> io::Result<()> {
     for (index, field) in fields.iter().enumerate() {
         if index > 0 {
             writer.write_all(b",")?;
         }
 
-        let requires_quotes = field
-            .bytes()
-            .any(|byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'));
+        let requires_quotes = force_quotes.get(index).copied().unwrap_or(false)
+            || field
+                .bytes()
+                .any(|byte| matches!(byte, b',' | b'"' | b'\\r' | b'\\n'));
 
         if requires_quotes {
             writer.write_all(b"\"")?;
@@ -387,13 +474,14 @@ fn write_csv_record(writer: &mut impl Write, fields: &[String]) -> io::Result<()
         }
     }
 
-    writer.write_all(b"\r\n")
+    writer.write_all(b"\\r\\n")
 }
 
 fn write_manifest(
     destination: &Path,
     schema_version: i64,
     exported_files: &[String],
+    spreadsheet_safe: bool,
 ) -> PortabilityResult<()> {
     let manifest_path = destination.join("manifest.txt");
     let file = create_private_file(&manifest_path)?;
@@ -408,6 +496,24 @@ fn write_manifest(
     writeln!(writer, "exported_at_unix_seconds={exported_at}")?;
     writeln!(writer, "null_values=empty_csv_fields")?;
     writeln!(writer, "blob_values=lowercase_hex")?;
+    writeln!(
+        writer,
+        "csv_mode={}",
+        if spreadsheet_safe {
+            "spreadsheet_safe"
+        } else {
+            "lossless_raw"
+        }
+    )?;
+    writeln!(
+        writer,
+        "formula_like_text_cells={}",
+        if spreadsheet_safe {
+            "tab_prefix_or_apostrophe_prefix"
+        } else {
+            "unchanged"
+        }
+    )?;
     writeln!(writer, "files={}", exported_files.join(","))?;
     writer.flush()?;
     writer.get_ref().sync_all()?;
@@ -715,6 +821,92 @@ mod tests {
         );
 
         fs::remove_dir_all(destination).expect("remove test folder");
+    }
+
+    #[test]
+    fn spreadsheet_safe_text_neutralizes_formula_and_control_prefixes() {
+        assert_eq!(spreadsheet_safe_text("=1+1"), ("\\t=1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("  +1+1"), ("\\t  +1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("@SUM(1,1)"), ("\\t@SUM(1,1)".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("＝1+1"), ("\\t＝1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("  ＠SUM(1,1)"), ("\\t  ＠SUM(1,1)".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("\\t=1+1"), ("'\\t=1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("\\n=1+1"), ("'\\n=1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("Read 20 pages"), ("Read 20 pages".to_string(), false));
+    }
+
+    #[test]
+    fn spreadsheet_safe_export_neutralizes_untrusted_text_and_quotes_the_cells() {
+        let mut source = populated_database();
+        source
+            .execute(
+                "UPDATE habits SET name = ?1, description = ?2 WHERE id = 1",
+                ["=1+1", "  +SUM(1,1)"],
+            )
+            .expect("set formula-like habit text");
+        source
+            .execute(
+                "UPDATE habit_entries SET note = ?1 WHERE habit_id = 1",
+                ["\\t=HYPERLINK(\\"https://example.invalid\\",\\"open\\")"],
+            )
+            .expect("set formula-like check-in note");
+        source
+            .execute(
+                "UPDATE goals SET title = ?1 WHERE id = 1",
+                ["＝SUM(1,1)"],
+            )
+            .expect("set full-width formula-like goal title");
+        source
+            .execute(
+                "UPDATE routines SET title = ?1 WHERE id = 1",
+                ["=1+1; \\"quoted\\",=2+2"],
+            )
+            .expect("set CSV breakout-like routine title");
+
+        let destination = temp_path("spreadsheet-safe");
+        export_csv_bundle(&mut source, &destination).expect("create spreadsheet-safe export");
+
+        let habits = fs::read_to_string(destination.join("habits.csv")).expect("read habits CSV");
+        let entries = fs::read_to_string(destination.join("habit_entries.csv"))
+            .expect("read entries CSV");
+        let goals = fs::read_to_string(destination.join("goals.csv")).expect("read goals CSV");
+        let routines =
+            fs::read_to_string(destination.join("routines.csv")).expect("read routines CSV");
+        let manifest =
+            fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
+
+        assert!(habits.contains("\\\"\\t=1+1\\\",\\\"\\t  +SUM(1,1)\\\""));
+        assert!(entries.contains("\\\"'\\t=HYPERLINK"));
+        assert!(goals.contains("\\\"\\t＝SUM(1,1)\\\""));
+        assert!(routines.contains("\\\"\\t=1+1; \\\\"quoted\\\",=2+2\\\""));
+        assert!(manifest.contains("csv_mode=spreadsheet_safe"));
+        assert!(manifest.contains("formula_like_text_cells=tab_prefix_or_apostrophe_prefix"));
+
+        fs::remove_dir_all(destination).expect("remove safe export");
+    }
+
+    #[test]
+    fn raw_csv_export_preserves_formula_like_text_exactly() {
+        let mut source = populated_database();
+        source
+            .execute(
+                "UPDATE habits SET name = ?1, description = ?2 WHERE id = 1",
+                ["=1+1", "  +SUM(1,1)"],
+            )
+            .expect("set formula-like habit text");
+
+        let destination = temp_path("raw-csv");
+        export_csv_bundle_raw(&mut source, &destination).expect("create raw export");
+
+        let habits = fs::read_to_string(destination.join("habits.csv")).expect("read habits CSV");
+        let manifest =
+            fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
+
+        assert!(habits.contains(",=1+1,  +SUM(1,1),"));
+        assert!(manifest.contains("csv_mode=lossless_raw"));
+        assert!(manifest.contains("formula_like_text_cells=unchanged"));
+
+        fs::remove_dir_all(destination).expect("remove raw export");
     }
 
     #[test]
