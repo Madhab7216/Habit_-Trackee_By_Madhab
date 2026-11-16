@@ -1,6 +1,9 @@
 use crate::domain::{Cadence, CivilDate, HabitSchedule};
 use rusqlite::{Connection, Result, params};
-use std::{env, fs, io, path::{Path, PathBuf}};
+use std::{
+    env, fs, io,
+    path::{Path, PathBuf},
+};
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const PAUSE_MIGRATION: &str = include_str!("../migrations/0002_pause_periods.sql");
@@ -840,7 +843,6 @@ mod tests {
         );
     }
 }
-
 
 #[cfg(all(test, unix))]
 mod private_storage_tests {
