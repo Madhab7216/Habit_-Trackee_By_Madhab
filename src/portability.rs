@@ -26,6 +26,7 @@ const EXPORT_TABLES: &[&str] = &[
     "goals",
     "goal_habits",
     "goal_milestones",
+    "period_reviews",
     "settings",
 ];
 
@@ -476,6 +477,31 @@ mod tests {
                 [],
             )
             .expect("insert setting");
+        connection
+            .execute_batch(
+                "CREATE TABLE review_schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                 );",
+            )
+            .expect("create review migration ledger");
+        connection
+            .execute_batch(include_str!("../migrations/0004_period_reviews.sql"))
+            .expect("apply period review migration");
+        connection
+            .execute(
+                "INSERT INTO review_schema_migrations(version) VALUES (1)",
+                [],
+            )
+            .expect("record period review migration");
+        connection
+            .execute(
+                "INSERT INTO period_reviews
+                    (period_kind, period_start, went_well, challenges, lessons, next_focus)
+                 VALUES ('week', '2026-11-09', 'Walked regularly', 'Rain on two days', 'Morning works best', 'Keep a short walk')",
+                [],
+            )
+            .expect("insert period review");
 
         connection
     }
@@ -510,12 +536,20 @@ mod tests {
         let milestone_count: i64 = restored
             .query_row("SELECT COUNT(*) FROM goal_milestones", [], |row| row.get(0))
             .expect("count restored goal milestones");
+        let review_focus: String = restored
+            .query_row(
+                "SELECT next_focus FROM period_reviews WHERE period_kind = 'week'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read restored period review");
 
         assert_eq!(habit_name, "Drink \"water\", slowly\nand consistently");
         assert_eq!(entry_count, 1);
         assert_eq!(pause_count, 1);
         assert_eq!(goal_count, 1);
         assert_eq!(milestone_count, 1);
+        assert_eq!(review_focus, "Keep a short walk");
         drop(restored);
 
         fs::remove_file(backup_path).expect("remove test backup");
@@ -586,6 +620,7 @@ mod tests {
             "habit_tag_links.csv",
             "goals.csv",
             "goal_habits.csv",
+            "period_reviews.csv",
             "settings.csv",
         ] {
             assert!(destination.join(filename).is_file(), "missing {filename}");

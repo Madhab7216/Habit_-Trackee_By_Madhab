@@ -1,6 +1,7 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod reviews;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
@@ -63,6 +64,14 @@ fn build_ui(application: &Application) {
         goals::open_window(&goals_parent, Rc::clone(&goals_connection));
     });
     header.pack_end(&goals_button);
+
+    let reviews_button = Button::with_label("Weekly & monthly reviews");
+    let reviews_parent = window.clone();
+    let reviews_connection = Rc::clone(&state.connection);
+    reviews_button.connect_clicked(move |_| {
+        reviews::open_window(&reviews_parent, Rc::clone(&reviews_connection));
+    });
+    header.pack_end(&reviews_button);
     window.set_titlebar(Some(&header));
 
     let page = gtk::Box::new(Orientation::Vertical, 14);

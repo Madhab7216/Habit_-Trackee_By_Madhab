@@ -32,6 +32,13 @@ A privacy-first, offline-first native habit and personal productivity app for Li
 - Skipped milestones are excluded from the progress denominator and displayed separately.
 - Existing goal and habit-link records are preserved by an additive milestone migration.
 
+### Weekly and monthly reviews (M5)
+- Save one private reflection for each Monday-start week or first-day-start month.
+- Capture wins, challenges, lessons and the next period's focus.
+- Review counts of saved completed, partial and skipped records without inventing missed days or claiming schedule adherence.
+- Review notes stay in the local SQLite database and are included in verified database backups and CSV bundles.
+- Note fields are bounded to 8,000 characters each; existing notes are updated for the same period rather than duplicated.
+
 ### Local data portability (M6)
 Build the companion CLI with the application:
 
