@@ -923,7 +923,7 @@ mod tests {
         let habits = fs::read_to_string(destination.join("habits.csv")).expect("read habits CSV");
         let manifest = fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
 
-        assert!(habits.contains(",=1+1,  +SUM(1,1),"));
+        assert!(habits.contains(",=1+1,\"  +SUM(1,1)\","));
         assert!(manifest.contains("csv_mode=lossless_raw"));
         assert!(manifest.contains("formula_like_text_cells=unchanged"));
 
