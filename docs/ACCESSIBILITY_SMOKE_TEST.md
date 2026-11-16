@@ -10,7 +10,8 @@ The smoke test verifies that:
 - the main window is exposed to the accessibility bus;
 - the primary Today actions have their expected accessible names;
 - no exposed push button is unnamed;
-- at least one named text input is exposed.
+- the Habit name entry is labelled by its visible label;
+- the schedule selector and weekly target spinner expose their associated labels.
 
 The test creates its database under a temporary `XDG_DATA_HOME`, never uses personal habit records, and deletes the temporary directory on exit. It does not run the application as root, use secrets, or upload user data.
 
@@ -22,6 +23,8 @@ A passing AT-SPI snapshot is not a full accessibility certification. It does not
 - contrast, colour-only status communication, zoom or large-text clipping;
 - Bengali font shaping, translation completeness or visual layout;
 - every dialog and every screen added by separate feature branches.
+
+The Today form associates each input with a visible GTK label through the `LabelledBy` accessibility relation. The CI assertion checks the field names and expected AT-SPI roles; it does not replace checking their announcement order or pronunciation with Orca.
 
 Those behaviours still need manual validation on the target Linux Mint workstation.
 
