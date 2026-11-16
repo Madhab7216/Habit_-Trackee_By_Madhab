@@ -7,10 +7,7 @@
 
 use crate::timezone::IanaTimeZone;
 use jiff::civil::Date;
-use rusqlite::{
-    params, Connection, OptionalExtension, Row, TransactionBehavior,
-    types::Type,
-};
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params, types::Type};
 use std::{error::Error, fmt, io};
 
 const MIGRATION_VERSION: i64 = 1;
@@ -74,10 +71,16 @@ END;
 pub enum Recurrence {
     Daily,
     /// Bit 0 = Monday through bit 6 = Sunday.
-    Weekdays { weekday_mask: u8 },
-    EveryNDays { interval_days: u16 },
+    Weekdays {
+        weekday_mask: u8,
+    },
+    EveryNDays {
+        interval_days: u16,
+    },
     /// Sessions can occur on any day; the quota is per ISO week.
-    TimesPerWeek { target_per_week: u8 },
+    TimesPerWeek {
+        target_per_week: u8,
+    },
 }
 
 impl Recurrence {
@@ -88,9 +91,7 @@ impl Recurrence {
             {
                 Err(ScheduleHistoryError::InvalidRecurrence)
             }
-            Self::EveryNDays { interval_days: 0 } => {
-                Err(ScheduleHistoryError::InvalidRecurrence)
-            }
+            Self::EveryNDays { interval_days: 0 } => Err(ScheduleHistoryError::InvalidRecurrence),
             Self::TimesPerWeek { target_per_week } if !(1..=7).contains(&target_per_week) => {
                 Err(ScheduleHistoryError::InvalidRecurrence)
             }
@@ -98,18 +99,34 @@ impl Recurrence {
         }
     }
 
-    fn encode(self) -> (&'static str, Option<i64>, Option<i64>, Option<i64>, &'static str) {
+    fn encode(
+        self,
+    ) -> (
+        &'static str,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        &'static str,
+    ) {
         match self {
             Self::Daily => ("daily", None, None, None, "day"),
             Self::Weekdays { weekday_mask } => {
                 ("weekdays", Some(i64::from(weekday_mask)), None, None, "day")
             }
-            Self::EveryNDays { interval_days } => {
-                ("every_n_days", None, Some(i64::from(interval_days)), None, "day")
-            }
-            Self::TimesPerWeek { target_per_week } => {
-                ("times_per_week", None, None, Some(i64::from(target_per_week)), "week")
-            }
+            Self::EveryNDays { interval_days } => (
+                "every_n_days",
+                None,
+                Some(i64::from(interval_days)),
+                None,
+                "day",
+            ),
+            Self::TimesPerWeek { target_per_week } => (
+                "times_per_week",
+                None,
+                None,
+                Some(i64::from(target_per_week)),
+                "week",
+            ),
         }
     }
 
@@ -233,10 +250,18 @@ impl fmt::Display for ScheduleHistoryError {
             Self::Database(error) => write!(formatter, "database error: {error}"),
             Self::InvalidDate => write!(formatter, "schedule date is invalid"),
             Self::InvalidRecurrence => write!(formatter, "schedule recurrence is invalid"),
-            Self::InvalidTimeZone => write!(formatter, "a valid IANA time-zone identifier is required"),
-            Self::InvalidReason => write!(formatter, "change reason must be at most 240 characters"),
-            Self::EndBeforeStart => write!(formatter, "schedule end date cannot precede its effective date"),
-            Self::DateBeforeHabitStart => write!(formatter, "a revision cannot start before the habit itself"),
+            Self::InvalidTimeZone => {
+                write!(formatter, "a valid IANA time-zone identifier is required")
+            }
+            Self::InvalidReason => {
+                write!(formatter, "change reason must be at most 240 characters")
+            }
+            Self::EndBeforeStart => {
+                write!(formatter, "schedule end date cannot precede its effective date")
+            }
+            Self::DateBeforeHabitStart => {
+                write!(formatter, "a revision cannot start before the habit itself")
+            },
             Self::PastEditRequiresConfirmation => {
                 write!(formatter, "a past-effective schedule edit needs explicit confirmation")
             }
@@ -244,7 +269,9 @@ impl fmt::Display for ScheduleHistoryError {
                 write!(formatter, "a schedule revision already exists for that effective date")
             }
             Self::HabitNotFound => write!(formatter, "habit was not found"),
-            Self::HabitArchived => write!(formatter, "an archived habit cannot receive a new schedule revision"),
+            Self::HabitArchived => {
+                write!(formatter, "an archived habit cannot receive a new schedule revision")
+            },
             Self::CorruptRevision => write!(formatter, "stored schedule revision is invalid"),
         }
     }
@@ -473,7 +500,10 @@ fn row_to_revision(row: &Row<'_>) -> rusqlite::Result<ScheduleRevision> {
         rusqlite::Error::FromSqlConversionFailure(
             4,
             Type::Text,
-            Box::new(io::Error::new(io::ErrorKind::InvalidData, error.to_string())),
+            Box::new(io::Error::new(
+                io::ErrorKind::InvalidData,
+                error.to_string(),
+            )),
         )
     })?;
 
@@ -582,7 +612,10 @@ mod tests {
         assert_eq!(revisions[0].revision_no, 1);
         assert_eq!(revisions[0].effective_from, date(2026, 11, 1));
         assert_eq!(revisions[0].time_zone_id, "local");
-        assert_eq!(revisions[0].time_zone_status, TimeZoneStatus::LegacyUnverified);
+        assert_eq!(
+            revisions[0].time_zone_status,
+            TimeZoneStatus::LegacyUnverified
+        );
         assert_eq!(revisions[0].source, "legacy");
     }
 
@@ -742,12 +775,8 @@ mod tests {
             Err(ScheduleHistoryError::EndBeforeStart)
         ));
 
-        let mut invalid_reason = revision(
-            date(2026, 11, 20),
-            Recurrence::Daily,
-            "Asia/Kolkata",
-            None,
-        );
+        let mut invalid_reason =
+            revision(date(2026, 11, 20), Recurrence::Daily, "Asia/Kolkata", None);
         invalid_reason.change_reason = "x".repeat(MAX_REASON_CHARS + 1);
         assert!(matches!(
             append_revision(
@@ -767,12 +796,7 @@ mod tests {
         let habit_id = add_habit(&connection, "local");
         initialize(&mut connection).expect("initialize");
 
-        let before_start = revision(
-            date(2026, 10, 31),
-            Recurrence::Daily,
-            "Asia/Kolkata",
-            None,
-        );
+        let before_start = revision(date(2026, 10, 31), Recurrence::Daily, "Asia/Kolkata", None);
         assert!(matches!(
             append_revision(
                 &mut connection,
@@ -784,12 +808,7 @@ mod tests {
             Err(ScheduleHistoryError::DateBeforeHabitStart)
         ));
 
-        let duplicate = revision(
-            date(2026, 11, 1),
-            Recurrence::Daily,
-            "Asia/Kolkata",
-            None,
-        );
+        let duplicate = revision(date(2026, 11, 1), Recurrence::Daily, "Asia/Kolkata", None);
         assert!(matches!(
             append_revision(
                 &mut connection,
