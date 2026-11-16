@@ -178,7 +178,8 @@ fn verify_schedule_history(connection: &Connection) -> PortabilityResult<()> {
     if !table_exists(connection, "habit_schedule_revisions")? {
         return Err(invalid_data(
             "schedule-history migration ledger exists but habit_schedule_revisions is missing",
-        ).into());
+        )
+        .into());
     }
 
     let habits_without_history: i64 = connection.query_row(
@@ -193,7 +194,8 @@ fn verify_schedule_history(connection: &Connection) -> PortabilityResult<()> {
     if habits_without_history != 0 {
         return Err(invalid_data(format!(
             "{habits_without_history} habits are missing a baseline schedule revision"
-        )).into());
+        ))
+        .into());
     }
 
     Ok(())
