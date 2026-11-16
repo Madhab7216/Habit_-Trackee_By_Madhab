@@ -1,0 +1,45 @@
+name: Desktop metadata
+
+on:
+  push:
+    branches:
+      - main
+      - work/linux-mint-habit-tracker-foundation
+      - work/linux-desktop-metadata
+  pull_request:
+    branches:
+      - main
+      - work/linux-mint-habit-tracker-foundation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-metadata-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate desktop integration files
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install metadata validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes appstream desktop-file-utils
+
+      - name: Validate desktop launcher
+        run: desktop-file-validate packaging/org.madhab.habittracker.desktop
+
+      - name: Validate AppStream metainfo
+        run: appstreamcli validate --pedantic packaging/org.madhab.habittracker.metainfo.xml
+
+      - name: Check launcher, AppStream, icon and Cargo references agree
+        run: python3 scripts/validate-desktop-metadata.py

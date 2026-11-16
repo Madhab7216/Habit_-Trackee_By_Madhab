@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.madhab.habittracker</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Habit Trackers by Madhab</name>
+  <summary>Private, offline habit and personal productivity tracking</summary>
+  <description>
+    <p>
+      Habit Trackers by Madhab is a native Linux desktop application for
+      recording habits and organizing personal goals. It is designed around
+      local-first storage so personal habit records stay on the user's device.
+    </p>
+    <p>
+      The engineering preview uses GTK 4, Rust and SQLite. Core tracking is
+      intended to work offline without an account, cloud synchronization,
+      advertising, telemetry or remote AI.
+    </p>
+  </description>
+  <developer id="io.github.madhab7216">
+    <name>Madhab</name>
+  </developer>
+  <url type="homepage">https://github.com/Madhab7216/Habit_-Trackee_By_Madhab</url>
+  <launchable type="desktop-id">org.madhab.habittracker.desktop</launchable>
+  <icon type="stock">org.madhab.habittracker</icon>
+  <categories>
+    <category>Office</category>
+    <category>Utility</category>
+  </categories>
+  <provides>
+    <binary>madhab-habit-tracker</binary>
+  </provides>
+  <releases>
+    <release version="0.1.0" date="2026-11-17" type="development">
+      <description>
+        <p>Engineering preview. This is not a stable release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

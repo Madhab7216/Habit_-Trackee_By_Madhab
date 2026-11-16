@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Habit Trackers by Madhab
+GenericName=Habit Tracker
+Comment=Track habits, goals and routines privately on your desktop
+Icon=org.madhab.habittracker
+Exec=madhab-habit-tracker
+Terminal=false
+Categories=Office;ProjectManagement;
+Keywords=Routine;Goals;Progress;Planning;Productivity;
