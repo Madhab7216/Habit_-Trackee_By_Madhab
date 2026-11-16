@@ -425,7 +425,11 @@ fn export_table(
 /// (with a data-fidelity trade-off). Leading control characters use an apostrophe prefix.
 /// This is defense in depth, not a universal guarantee across every spreadsheet program.
 fn spreadsheet_safe_text(value: &str) -> (String, bool) {
-    if matches!(value.chars().next(), Some('\t' | '\r' | '\n')) {
+    let has_leading_control = value
+        .chars()
+        .take_while(|character| character.is_whitespace())
+        .any(|character| matches!(character, '\t' | '\r' | '\n'));
+    if has_leading_control {
         return (format!("'{value}"), true);
     }
 
@@ -832,6 +836,7 @@ mod tests {
         assert_eq!(spreadsheet_safe_text("  ＠SUM(1,1)"), ("\t  ＠SUM(1,1)".to_string(), true));
         assert_eq!(spreadsheet_safe_text("\t=1+1"), ("'\t=1+1".to_string(), true));
         assert_eq!(spreadsheet_safe_text("\n=1+1"), ("'\n=1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text(" \t=1+1"), ("' \t=1+1".to_string(), true));
         assert_eq!(spreadsheet_safe_text("Read 20 pages"), ("Read 20 pages".to_string(), false));
     }
 
@@ -876,7 +881,7 @@ mod tests {
             fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
 
         assert!(habits.contains("\"\t=1+1\",\"\t  +SUM(1,1)\""));
-        assert!(entries.contains("\"\t=HYPERLINK"));
+        assert!(entries.contains("\"'\t=HYPERLINK"));
         assert!(goals.contains("\"\t＝SUM(1,1)\""));
         assert!(routines.contains("\t=1+1; \"\"quoted\"\",=2+2"));
         assert!(manifest.contains("csv_mode=spreadsheet_safe"));
