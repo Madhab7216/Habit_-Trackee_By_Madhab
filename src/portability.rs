@@ -489,7 +489,10 @@ mod tests {
             .execute_batch(include_str!("../migrations/0004_period_reviews.sql"))
             .expect("apply period review migration");
         connection
-            .execute("INSERT INTO review_schema_migrations(version) VALUES (1)", [])
+            .execute(
+                "INSERT INTO review_schema_migrations(version) VALUES (1)",
+                [],
+            )
             .expect("record period review migration");
         connection
             .execute(
@@ -534,7 +537,11 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM goal_milestones", [], |row| row.get(0))
             .expect("count restored goal milestones");
         let review_focus: String = restored
-            .query_row("SELECT next_focus FROM period_reviews WHERE period_kind = 'week'", [], |row| row.get(0))
+            .query_row(
+                "SELECT next_focus FROM period_reviews WHERE period_kind = 'week'",
+                [],
+                |row| row.get(0),
+            )
             .expect("read restored period review");
 
         assert_eq!(habit_name, "Drink \"water\", slowly\nand consistently");
