@@ -300,10 +300,7 @@ pub fn export_csv_bundle(source: &mut Connection, destination: &Path) -> Portabi
 /// This mode intentionally does not neutralize spreadsheet formulas. Only use it for
 /// trusted data-processing workflows; prefer the default spreadsheet-safe export when
 /// a person will open the files in Excel, LibreOffice Calc or another spreadsheet.
-pub fn export_csv_bundle_raw(
-    source: &mut Connection,
-    destination: &Path,
-) -> PortabilityResult<()> {
+pub fn export_csv_bundle_raw(source: &mut Connection, destination: &Path) -> PortabilityResult<()> {
     export_csv_bundle_with_mode(source, destination, false)
 }
 
@@ -830,14 +827,38 @@ mod tests {
     #[test]
     fn spreadsheet_safe_text_neutralizes_formula_and_control_prefixes() {
         assert_eq!(spreadsheet_safe_text("=1+1"), ("\t=1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("  +1+1"), ("\t  +1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("@SUM(1,1)"), ("\t@SUM(1,1)".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("＝1+1"), ("\t＝1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("  ＠SUM(1,1)"), ("\t  ＠SUM(1,1)".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("\t=1+1"), ("'\t=1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("\n=1+1"), ("'\n=1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text(" \t=1+1"), ("' \t=1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("Read 20 pages"), ("Read 20 pages".to_string(), false));
+        assert_eq!(
+            spreadsheet_safe_text("  +1+1"),
+            ("\t  +1+1".to_string(), true)
+        );
+        assert_eq!(
+            spreadsheet_safe_text("@SUM(1,1)"),
+            ("\t@SUM(1,1)".to_string(), true)
+        );
+        assert_eq!(
+            spreadsheet_safe_text("＝1+1"),
+            ("\t＝1+1".to_string(), true)
+        );
+        assert_eq!(
+            spreadsheet_safe_text("  ＠SUM(1,1)"),
+            ("\t  ＠SUM(1,1)".to_string(), true)
+        );
+        assert_eq!(
+            spreadsheet_safe_text("\t=1+1"),
+            ("'\t=1+1".to_string(), true)
+        );
+        assert_eq!(
+            spreadsheet_safe_text("\n=1+1"),
+            ("'\n=1+1".to_string(), true)
+        );
+        assert_eq!(
+            spreadsheet_safe_text(" \t=1+1"),
+            ("' \t=1+1".to_string(), true)
+        );
+        assert_eq!(
+            spreadsheet_safe_text("Read 20 pages"),
+            ("Read 20 pages".to_string(), false)
+        );
     }
 
     #[test]
@@ -856,10 +877,7 @@ mod tests {
             )
             .expect("set formula-like check-in note");
         source
-            .execute(
-                "UPDATE goals SET title = ?1 WHERE id = 1",
-                ["＝SUM(1,1)"],
-            )
+            .execute("UPDATE goals SET title = ?1 WHERE id = 1", ["＝SUM(1,1)"])
             .expect("set full-width formula-like goal title");
         source
             .execute(
@@ -872,13 +890,12 @@ mod tests {
         export_csv_bundle(&mut source, &destination).expect("create spreadsheet-safe export");
 
         let habits = fs::read_to_string(destination.join("habits.csv")).expect("read habits CSV");
-        let entries = fs::read_to_string(destination.join("habit_entries.csv"))
-            .expect("read entries CSV");
+        let entries =
+            fs::read_to_string(destination.join("habit_entries.csv")).expect("read entries CSV");
         let goals = fs::read_to_string(destination.join("goals.csv")).expect("read goals CSV");
         let routines =
             fs::read_to_string(destination.join("routines.csv")).expect("read routines CSV");
-        let manifest =
-            fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
+        let manifest = fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
 
         assert!(habits.contains("\"\t=1+1\",\"\t  +SUM(1,1)\""));
         assert!(entries.contains("\"'\t=HYPERLINK"));
