@@ -1,6 +1,6 @@
 use crate::domain::{Cadence, CivilDate, HabitSchedule};
 use rusqlite::{Connection, Result, params};
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, io, path::{Path, PathBuf}};
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
 const PAUSE_MIGRATION: &str = include_str!("../migrations/0002_pause_periods.sql");
@@ -21,9 +21,15 @@ pub fn open() -> Result<Connection> {
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     fs::create_dir_all(&data_dir)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    secure_data_directory(&data_dir)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
 
     let path = data_dir.join("habit-tracker.sqlite3");
-    let mut connection = Connection::open(path)?;
+    validate_database_path(&path)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    let mut connection = Connection::open(&path)?;
+    secure_database_file(&path)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
     migrate(&mut connection)?;
     Ok(connection)
@@ -54,6 +60,74 @@ fn data_directory() -> std::io::Result<PathBuf> {
             "Cannot resolve an absolute XDG_DATA_HOME or HOME; refusing to write app data to the current directory.",
         )
     })
+}
+
+/// Restrict the app-owned data directory to the current account on Unix.
+/// The directory permission also protects SQLite WAL/SHM sidecar files.
+fn secure_data_directory(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "refusing a symbolic-link app data directory",
+        ));
+    }
+    if !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "app data path is not a directory",
+        ));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    }
+
+    Ok(())
+}
+
+/// Refuse to let SQLite follow a symlink or open a non-regular path.
+fn validate_database_path(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "refusing a symbolic-link database path",
+        )),
+        Ok(metadata) if metadata.is_file() => Ok(()),
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "database path is not a regular file",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+/// Restrict an existing SQLite database to owner read/write access on Unix.
+fn secure_database_file(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "refusing a symbolic-link database path",
+        ));
+    }
+    if !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "database path is not a regular file",
+        ));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    }
+
+    Ok(())
 }
 
 fn migrate(connection: &mut Connection) -> Result<()> {
@@ -764,5 +838,115 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+}
+
+
+#[cfg(all(test, unix))]
+mod private_storage_tests {
+    use super::*;
+    use std::{
+        os::unix::fs::{PermissionsExt, symlink},
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    static NEXT_PATH: AtomicU64 = AtomicU64::new(0);
+
+    fn temporary_path(label: &str) -> PathBuf {
+        let sequence = NEXT_PATH.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "madhab-private-storage-{label}-{}-{sequence}",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn app_data_directory_is_restricted_to_owner() {
+        let path = temporary_path("directory");
+        fs::create_dir(&path).expect("create test directory");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755))
+            .expect("make test directory permissive");
+
+        secure_data_directory(&path).expect("secure app data directory");
+
+        let mode = fs::metadata(&path)
+            .expect("read directory metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o700);
+
+        fs::remove_dir_all(path).expect("remove test directory");
+    }
+
+    #[test]
+    fn database_file_is_restricted_to_owner() {
+        let directory = temporary_path("database");
+        fs::create_dir(&directory).expect("create test directory");
+        let path = directory.join("habit-tracker.sqlite3");
+        fs::write(&path, b"test database").expect("create test database");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644))
+            .expect("make test database permissive");
+
+        secure_database_file(&path).expect("secure database file");
+
+        let mode = fs::metadata(&path)
+            .expect("read database metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
+
+        fs::remove_dir_all(directory).expect("remove test directory");
+    }
+
+    #[test]
+    fn database_path_rejects_symbolic_links() {
+        let directory = temporary_path("symlink");
+        fs::create_dir(&directory).expect("create test directory");
+        let target = directory.join("target.sqlite3");
+        let link = directory.join("linked.sqlite3");
+        fs::write(&target, b"target").expect("create target file");
+        symlink(&target, &link).expect("create database symlink");
+
+        assert_eq!(
+            validate_database_path(&link).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        assert_eq!(
+            secure_database_file(&link).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+
+        fs::remove_dir_all(directory).expect("remove test directory");
+    }
+
+    #[test]
+    fn app_data_directory_rejects_symbolic_links() {
+        let directory = temporary_path("directory-symlink");
+        fs::create_dir(&directory).expect("create target directory");
+        let link = temporary_path("directory-link");
+        symlink(&directory, &link).expect("create directory symlink");
+
+        assert_eq!(
+            secure_data_directory(&link).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+
+        fs::remove_file(link).expect("remove directory symlink");
+        fs::remove_dir_all(directory).expect("remove target directory");
+    }
+
+    #[test]
+    fn database_path_rejects_directories() {
+        let directory = temporary_path("not-a-file");
+        fs::create_dir(&directory).expect("create directory");
+
+        assert_eq!(
+            validate_database_path(&directory).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+
+        fs::remove_dir_all(directory).expect("remove test directory");
     }
 }
