@@ -4,7 +4,7 @@ This test complements the Linux desktop startup check. The existing startup test
 
 ## Automated coverage
 
-The test launches the actual GTK application under Xvfb and a private D-Bus session with \`GTK_A11Y=atspi\`. It then uses the GObject-introspection bindings for AT-SPI to inspect the live application window.
+The test launches the actual GTK application under Xvfb and a private D-Bus session with `GTK_A11Y=atspi`. It then uses the GObject-introspection bindings for AT-SPI to inspect the live application window.
 
 The smoke test verifies that:
 - the main window is exposed to the accessibility bus;
@@ -12,7 +12,7 @@ The smoke test verifies that:
 - no exposed push button is unnamed;
 - at least one named text input is exposed.
 
-The test creates its database under a temporary \`XDG_DATA_HOME\`, never uses personal habit records, and deletes the temporary directory on exit. It does not run the application as root, use secrets, or upload user data.
+The test creates its database under a temporary `XDG_DATA_HOME`, never uses personal habit records, and deletes the temporary directory on exit. It does not run the application as root, use secrets, or upload user data.
 
 ## What this test does not prove
 
@@ -29,17 +29,17 @@ Those behaviours still need manual validation on the target Linux Mint workstati
 
 Install the dependencies on Linux Mint (package names can vary by Mint/Ubuntu base):
 
-\`\`\`bash
+```bash
 sudo apt update
 sudo apt install build-essential pkg-config libgtk-4-dev xvfb xauth dbus-daemon at-spi2-core gir1.2-atspi-2.0 python3-gi
 cargo build --bin madhab-habit-tracker
 bash scripts/smoke-linux-accessibility.sh
-\`\`\`
+```
 
 ## Research basis
 
-- GTK selects its accessibility backend through \`GTK_A11Y\`; \`atspi\` enables the Linux accessibility bridge, while \`test\` is GTK's backend intended for test suites and remote CI.
-- GTK's \`GtkAccessible\` exposes roles, properties, relations and states to assistive technologies. GTK's own accessibility guidance recommends explicitly specifying accessible properties and using the GTK Inspector during development.
+- GTK selects its accessibility backend through `GTK_A11Y`; `atspi` enables the Linux accessibility bridge, while `test` is GTK's backend intended for test suites and remote CI.
+- GTK's `GtkAccessible` exposes roles, properties, relations and states to assistive technologies. GTK's own accessibility guidance recommends explicitly specifying accessible properties and using the GTK Inspector during development.
 - AT-SPI is a D-Bus accessibility interface that exposes accessible object names, roles, states and actions. The libatspi GObject-introspection API is preferred for new clients over pyatspi's legacy wrapper.
 
 References:
