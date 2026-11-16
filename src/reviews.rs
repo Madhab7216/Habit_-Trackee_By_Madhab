@@ -284,48 +284,52 @@ fn note_field(title: &str, hint: &str) -> (gtk::Box, gtk::TextView) {
     (field, view)
 }
 
+struct ReviewEditorWidgets<'a> {
+    wins: &'a gtk::TextView,
+    challenges: &'a gtk::TextView,
+    lessons: &'a gtk::TextView,
+    next_focus: &'a gtk::TextView,
+    summary: &'a gtk::Label,
+    feedback: &'a gtk::Label,
+}
+
 fn refresh_editor(
     connection: &Connection,
     kind: &str,
     start: &str,
-    wins: &gtk::TextView,
-    challenges: &gtk::TextView,
-    lessons: &gtk::TextView,
-    next_focus: &gtk::TextView,
-    summary: &gtk::Label,
-    feedback: &gtk::Label,
+    widgets: &ReviewEditorWidgets<'_>,
 ) {
     let review = match load_review(connection, kind, start) {
         Ok(review) => review,
         Err(error) => {
-            feedback.set_text(&format!("Could not load review: {error}"));
+            widgets.feedback.set_text(&format!("Could not load review: {error}"));
             return;
         }
     };
 
     match review {
         Some(review) => {
-            set_text(wins, &review.went_well);
-            set_text(challenges, &review.challenges);
-            set_text(lessons, &review.lessons);
-            set_text(next_focus, &review.next_focus);
-            feedback.set_text("Saved review loaded from this device.");
+            set_text(widgets.wins, &review.went_well);
+            set_text(widgets.challenges, &review.challenges);
+            set_text(widgets.lessons, &review.lessons);
+            set_text(widgets.next_focus, &review.next_focus);
+            widgets.feedback.set_text("Saved review loaded from this device.");
         }
         None => {
-            set_text(wins, "");
-            set_text(challenges, "");
-            set_text(lessons, "");
-            set_text(next_focus, "");
-            feedback.set_text("No review saved for this period yet.");
+            set_text(widgets.wins, "");
+            set_text(widgets.challenges, "");
+            set_text(widgets.lessons, "");
+            set_text(widgets.next_focus, "");
+            widgets.feedback.set_text("No review saved for this period yet.");
         }
     }
 
     match activity_summary(connection, kind, start) {
-        Ok(counts) => summary.set_text(&format!(
+        Ok(counts) => widgets.summary.set_text(&format!(
             "Saved records only · {} completed · {} partial · {} skipped. This is not an adherence score.",
             counts.completed, counts.partial, counts.skipped
         )),
-        Err(error) => summary.set_text(&format!("Activity summary unavailable: {error}")),
+        Err(error) => widgets.summary.set_text(&format!("Activity summary unavailable: {error}")),
     }
 }
 
@@ -440,17 +444,15 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
         match current_period_start(&current_connection.borrow(), kind) {
             Ok(start) => {
                 current_start.set_text(&start);
-                refresh_editor(
-                    &current_connection.borrow(),
-                    kind,
-                    &start,
-                    &current_wins,
-                    &current_challenges,
-                    &current_lessons,
-                    &current_next_focus,
-                    &current_summary,
-                    &current_feedback,
-                );
+                let widgets = ReviewEditorWidgets {
+                    wins: &current_wins,
+                    challenges: &current_challenges,
+                    lessons: &current_lessons,
+                    next_focus: &current_next_focus,
+                    summary: &current_summary,
+                    feedback: &current_feedback,
+                };
+                refresh_editor(&current_connection.borrow(), kind, &start, &widgets);
             }
             Err(error) => {
                 current_feedback.set_text(&format!("Could not find current period: {error}"))
@@ -473,17 +475,15 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
         } else {
             "week"
         };
-        refresh_editor(
-            &load_connection.borrow(),
-            kind,
-            &load_start.text(),
-            &load_wins,
-            &load_challenges,
-            &load_lessons,
-            &load_next_focus,
-            &load_summary,
-            &load_feedback,
-        );
+        let widgets = ReviewEditorWidgets {
+            wins: &load_wins,
+            challenges: &load_challenges,
+            lessons: &load_lessons,
+            next_focus: &load_next_focus,
+            summary: &load_summary,
+            feedback: &load_feedback,
+        };
+        refresh_editor(&load_connection.borrow(), kind, &load_start.text(), &widgets);
     });
 
     let save_connection = Rc::clone(&connection);
@@ -523,17 +523,15 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     match current_period_start(&connection.borrow(), "week") {
         Ok(start) => {
             period_start.set_text(&start);
-            refresh_editor(
-                &connection.borrow(),
-                "week",
-                &start,
-                &wins,
-                &challenges,
-                &lessons,
-                &next_focus,
-                &summary,
-                &feedback,
-            );
+            let widgets = ReviewEditorWidgets {
+                wins: &wins,
+                challenges: &challenges,
+                lessons: &lessons,
+                next_focus: &next_focus,
+                summary: &summary,
+                feedback: &feedback,
+            };
+            refresh_editor(&connection.borrow(), "week", &start, &widgets);
         }
         Err(error) => feedback.set_text(&format!("Could not initialize review window: {error}")),
     }
