@@ -98,7 +98,7 @@ fn validate_start(connection: &Connection, kind: &str, value: &str) -> Result<St
     Ok(value.to_string())
 }
 
-fn validate_note(value: &str, field: &str) -> Result<&str> {
+fn validate_note<'a>(value: &'a str, field: &str) -> Result<&'a str> {
     if value.chars().count() > MAX_NOTE_CHARS {
         return Err(invalid_field(&format!(
             "{field} must be 8,000 characters or fewer"
