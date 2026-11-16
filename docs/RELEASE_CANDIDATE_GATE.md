@@ -7,7 +7,7 @@ This is a deliberately separate, manually invoked release pipeline. It does not 
 After the feature branches have been reviewed and integrated into a release-candidate commit:
 
 1. Create a candidate tag matching the package version, such as `v0.1.0-rc.1`.
-2. Open **Actions → Release candidate gate → Run workflow** and select that tag as `candidate_ref`, or push the tag to trigger the gate automatically.
+2. Push the tag to trigger the gate automatically. Manual **Actions → Release candidate gate → Run workflow** dispatch is available once the workflow has been merged into the default branch; select the candidate tag as `candidate_ref`.
 3. Review the preflight result and every subsequent job.
 4. Publish a GitHub Release only after the exact candidate tag passes all jobs.
 
