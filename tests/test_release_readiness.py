@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import sys
+import runpy
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from check_release_readiness import inspect_release  # noqa: E402
+inspect_release = runpy.run_path(
+    str(Path(__file__).resolve().parents[1] / "scripts" / "check-release-readiness.py")
+)["inspect_release"]
 
 
 class ReleaseReadinessTests(unittest.TestCase):
