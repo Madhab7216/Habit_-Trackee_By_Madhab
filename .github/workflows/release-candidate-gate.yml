@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-candidate-${{ inputs.candidate_ref || github.ref }}
+  group: release-candidate-${{ github.event.inputs.candidate_ref || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -29,13 +29,13 @@ jobs:
       - name: Check out the selected candidate tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.candidate_ref || github.ref }}
+          ref: ${{ github.event.inputs.candidate_ref || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Confirm exact tag and fail-closed release preflight
         env:
-          CANDIDATE_REF: ${{ inputs.candidate_ref || github.ref }}
+          CANDIDATE_REF: ${{ github.event.inputs.candidate_ref || github.ref }}
         run: |
           set -euo pipefail
           candidate="${CANDIDATE_REF#refs/tags/}"
