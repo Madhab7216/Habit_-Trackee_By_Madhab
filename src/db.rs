@@ -26,6 +26,8 @@ pub fn open() -> Result<Connection> {
     let mut connection = Connection::open(path)?;
     connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
     migrate(&mut connection)?;
+    crate::schedule_history::initialize(&mut connection)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     Ok(connection)
 }
 
@@ -145,7 +147,8 @@ pub fn create_habit_with_cadence(
             ),
         };
 
-    connection.execute(
+    let transaction = connection.unchecked_transaction()?;
+    transaction.execute(
         "INSERT INTO habits
             (name, tracking_type, schedule_type, weekday_mask, interval_days,
              target_per_period, period_unit, start_date)
@@ -160,6 +163,10 @@ pub fn create_habit_with_cadence(
             start_date.to_string()
         ],
     )?;
+    let habit_id = transaction.last_insert_rowid();
+    crate::schedule_history::ensure_habit_baseline(&transaction, habit_id)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    transaction.commit()?;
     Ok(())
 }
 
@@ -427,6 +434,8 @@ mod tests {
             .execute_batch("PRAGMA foreign_keys = ON;")
             .expect("enable foreign keys");
         migrate(&mut connection).expect("apply migrations");
+        crate::schedule_history::initialize(&mut connection)
+            .expect("initialize schedule history");
         connection
     }
 
