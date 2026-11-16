@@ -425,7 +425,7 @@ fn export_table(
 /// (with a data-fidelity trade-off). Leading control characters use an apostrophe prefix.
 /// This is defense in depth, not a universal guarantee across every spreadsheet program.
 fn spreadsheet_safe_text(value: &str) -> (String, bool) {
-    if matches!(value.chars().next(), Some('\\t' | '\\r' | '\\n')) {
+    if matches!(value.chars().next(), Some('\t' | '\r' | '\n')) {
         return (format!("'{value}"), true);
     }
 
@@ -434,7 +434,7 @@ fn spreadsheet_safe_text(value: &str) -> (String, bool) {
         first_non_whitespace,
         Some('=' | '+' | '-' | '@' | '＝' | '＋' | '－' | '＠')
     ) {
-        return (format!("\\t{value}"), true);
+        return (format!("\t{value}"), true);
     }
 
     (value.to_owned(), false)
@@ -457,7 +457,7 @@ fn write_csv_record_with_quote_flags(
         let requires_quotes = force_quotes.get(index).copied().unwrap_or(false)
             || field
                 .bytes()
-                .any(|byte| matches!(byte, b',' | b'"' | b'\\r' | b'\\n'));
+                .any(|byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'));
 
         if requires_quotes {
             writer.write_all(b"\"")?;
@@ -474,7 +474,7 @@ fn write_csv_record_with_quote_flags(
         }
     }
 
-    writer.write_all(b"\\r\\n")
+    writer.write_all(b"\r\n")
 }
 
 fn write_manifest(
@@ -825,13 +825,13 @@ mod tests {
 
     #[test]
     fn spreadsheet_safe_text_neutralizes_formula_and_control_prefixes() {
-        assert_eq!(spreadsheet_safe_text("=1+1"), ("\\t=1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("  +1+1"), ("\\t  +1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("@SUM(1,1)"), ("\\t@SUM(1,1)".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("＝1+1"), ("\\t＝1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("  ＠SUM(1,1)"), ("\\t  ＠SUM(1,1)".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("\\t=1+1"), ("'\\t=1+1".to_string(), true));
-        assert_eq!(spreadsheet_safe_text("\\n=1+1"), ("'\\n=1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("=1+1"), ("\t=1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("  +1+1"), ("\t  +1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("@SUM(1,1)"), ("\t@SUM(1,1)".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("＝1+1"), ("\t＝1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("  ＠SUM(1,1)"), ("\t  ＠SUM(1,1)".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("\t=1+1"), ("'\t=1+1".to_string(), true));
+        assert_eq!(spreadsheet_safe_text("\n=1+1"), ("'\n=1+1".to_string(), true));
         assert_eq!(spreadsheet_safe_text("Read 20 pages"), ("Read 20 pages".to_string(), false));
     }
 
@@ -847,7 +847,7 @@ mod tests {
         source
             .execute(
                 "UPDATE habit_entries SET note = ?1 WHERE habit_id = 1",
-                ["\\t=HYPERLINK(\\"https://example.invalid\\",\\"open\\")"],
+                ["\t=HYPERLINK(\"https://example.invalid\",\"open\")"],
             )
             .expect("set formula-like check-in note");
         source
@@ -859,7 +859,7 @@ mod tests {
         source
             .execute(
                 "UPDATE routines SET title = ?1 WHERE id = 1",
-                ["=1+1; \\"quoted\\",=2+2"],
+                ["=1+1; \"quoted\",=2+2"],
             )
             .expect("set CSV breakout-like routine title");
 
@@ -875,10 +875,10 @@ mod tests {
         let manifest =
             fs::read_to_string(destination.join("manifest.txt")).expect("read manifest");
 
-        assert!(habits.contains("\\\"\\t=1+1\\\",\\\"\\t  +SUM(1,1)\\\""));
-        assert!(entries.contains("\\\"'\\t=HYPERLINK"));
-        assert!(goals.contains("\\\"\\t＝SUM(1,1)\\\""));
-        assert!(routines.contains("\\\"\\t=1+1; \\\\"quoted\\\",=2+2\\\""));
+        assert!(habits.contains("\"\t=1+1\",\"\t  +SUM(1,1)\""));
+        assert!(entries.contains("\"\t=HYPERLINK"));
+        assert!(goals.contains("\"\t＝SUM(1,1)\""));
+        assert!(routines.contains("\t=1+1; \"\"quoted\"\",=2+2"));
         assert!(manifest.contains("csv_mode=spreadsheet_safe"));
         assert!(manifest.contains("formula_like_text_cells=tab_prefix_or_apostrophe_prefix"));
 
