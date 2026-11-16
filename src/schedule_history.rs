@@ -606,7 +606,7 @@ mod tests {
     use jiff::civil::date;
 
     fn memory_connection() -> Connection {
-        let mut connection = Connection::open_in_memory().expect("open in-memory database");
+        let connection = Connection::open_in_memory().expect("open in-memory database");
         connection
             .execute_batch("PRAGMA foreign_keys = ON;")
             .expect("enable foreign keys");
