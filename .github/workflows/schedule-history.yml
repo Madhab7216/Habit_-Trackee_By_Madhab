@@ -1,0 +1,46 @@
+name: Effective-dated schedule history
+
+on:
+  push:
+    branches: ["work/m11-effective-dated-schedules"]
+  pull_request:
+    branches: ["work/m9-private-local-storage"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  schedule-history:
+    name: Effective schedule history checks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install GTK build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential pkg-config libgtk-4-dev
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.100.0
+          components: rustfmt, clippy
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Compile all targets
+        run: cargo check --all-targets
+      - name: Run Rust tests
+        run: cargo test --all-targets
+      - name: Run strict Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Run SQLite schema and migration tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Check audit script syntax
+        run: bash -n scripts/audit-linux-mint.sh
