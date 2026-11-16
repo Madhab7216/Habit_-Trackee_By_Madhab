@@ -141,15 +141,8 @@ pub fn create_habit_with_tracking(
         Cadence::Weekdays { weekday_mask } => {
             ("weekdays", Some(i64::from(weekday_mask)), None, None)
         }
-        Cadence::EveryNDays { interval } => {
-            ("every_n_days", None, Some(i64::from(interval)), None)
-        }
-        Cadence::TimesPerWeek { target } => (
-            "times_per_week",
-            None,
-            None,
-            Some(i64::from(target)),
-        ),
+        Cadence::EveryNDays { interval } => ("every_n_days", None, Some(i64::from(interval)), None),
+        Cadence::TimesPerWeek { target } => ("times_per_week", None, None, Some(i64::from(target))),
     };
 
     let (stored_type, stored_direction, stored_target, stored_unit) =
@@ -338,9 +331,7 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
 }
 
 fn invalid_measurement_field(field: &str) -> rusqlite::Error {
-    rusqlite::Error::InvalidParameterName(format!(
-        "invalid measured habit field: {field}"
-    ))
+    rusqlite::Error::InvalidParameterName(format!("invalid measured habit field: {field}"))
 }
 
 /// Persist today's actual value and return whether the configured target was met.
@@ -704,19 +695,24 @@ mod tests {
         )
         .expect("create measured habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Read pages'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT id FROM habits WHERE name = 'Read pages'",
+                [],
+                |row| row.get(0),
+            )
             .expect("read habit id");
 
-        assert!(!record_measurement_for_today(&connection, habit_id, 12.0)
-            .expect("save partial value"));
+        assert!(
+            !record_measurement_for_today(&connection, habit_id, 12.0).expect("save partial value")
+        );
         let partial = today_habits(&connection).expect("read partial habit");
         assert_eq!(partial[0].entry_status.as_deref(), Some("partial"));
         assert_eq!(partial[0].recorded_value, Some(12.0));
 
-        assert!(record_measurement_for_today(&connection, habit_id, 20.0)
-            .expect("save completed value"));
+        assert!(
+            record_measurement_for_today(&connection, habit_id, 20.0)
+                .expect("save completed value")
+        );
         let completed = today_habits(&connection).expect("read completed habit");
         assert!(completed[0].completed);
         assert_eq!(completed[0].entry_status.as_deref(), Some("completed"));
@@ -746,15 +742,21 @@ mod tests {
         )
         .expect("create limit habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Screen time'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT id FROM habits WHERE name = 'Screen time'",
+                [],
+                |row| row.get(0),
+            )
             .expect("read habit id");
 
-        assert!(!record_measurement_for_today(&connection, habit_id, 3.0)
-            .expect("save over-limit value"));
-        assert!(record_measurement_for_today(&connection, habit_id, 2.0)
-            .expect("save within-limit value"));
+        assert!(
+            !record_measurement_for_today(&connection, habit_id, 3.0)
+                .expect("save over-limit value")
+        );
+        assert!(
+            record_measurement_for_today(&connection, habit_id, 2.0)
+                .expect("save within-limit value")
+        );
         let stored_direction: String = connection
             .query_row(
                 "SELECT direction FROM habits WHERE id = ?1",
@@ -768,24 +770,69 @@ mod tests {
     #[test]
     fn measured_habits_reject_invalid_configuration_and_values() {
         let connection = memory_connection();
-        assert!(create_habit_with_tracking(
-            &connection, "No target", Cadence::Daily, "numeric", Some(0.0), Some("pages"), "at_least"
-        ).is_err());
-        assert!(create_habit_with_tracking(
-            &connection, "No unit", Cadence::Daily, "count", Some(3.0), Some("  "), "at_least"
-        ).is_err());
-        assert!(create_habit_with_tracking(
-            &connection, "Bad type", Cadence::Daily, "unknown", Some(3.0), Some("pages"), "at_least"
-        ).is_err());
-        assert!(create_habit_with_tracking(
-            &connection, "Bad direction", Cadence::Daily, "numeric", Some(3.0), Some("pages"), "unknown"
-        ).is_err());
+        assert!(
+            create_habit_with_tracking(
+                &connection,
+                "No target",
+                Cadence::Daily,
+                "numeric",
+                Some(0.0),
+                Some("pages"),
+                "at_least"
+            )
+            .is_err()
+        );
+        assert!(
+            create_habit_with_tracking(
+                &connection,
+                "No unit",
+                Cadence::Daily,
+                "count",
+                Some(3.0),
+                Some("  "),
+                "at_least"
+            )
+            .is_err()
+        );
+        assert!(
+            create_habit_with_tracking(
+                &connection,
+                "Bad type",
+                Cadence::Daily,
+                "unknown",
+                Some(3.0),
+                Some("pages"),
+                "at_least"
+            )
+            .is_err()
+        );
+        assert!(
+            create_habit_with_tracking(
+                &connection,
+                "Bad direction",
+                Cadence::Daily,
+                "numeric",
+                Some(3.0),
+                Some("pages"),
+                "unknown"
+            )
+            .is_err()
+        );
 
         create_habit_with_tracking(
-            &connection, "Valid", Cadence::Daily, "numeric", Some(3.0), Some("pages"), "at_least"
-        ).expect("create valid habit");
+            &connection,
+            "Valid",
+            Cadence::Daily,
+            "numeric",
+            Some(3.0),
+            Some("pages"),
+            "at_least",
+        )
+        .expect("create valid habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Valid'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Valid'", [], |row| {
+                row.get(0)
+            })
             .expect("read habit id");
         assert!(record_measurement_for_today(&connection, habit_id, f64::NAN).is_err());
         assert!(record_measurement_for_today(&connection, habit_id, -1.0).is_err());
@@ -795,10 +842,19 @@ mod tests {
     fn measured_checkins_reject_paused_habits() {
         let connection = memory_connection();
         create_habit_with_tracking(
-            &connection, "Stretch", Cadence::Daily, "duration", Some(15.0), Some("minutes"), "at_least"
-        ).expect("create measured habit");
+            &connection,
+            "Stretch",
+            Cadence::Daily,
+            "duration",
+            Some(15.0),
+            Some("minutes"),
+            "at_least",
+        )
+        .expect("create measured habit");
         let habit_id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Stretch'", [], |row| row.get(0))
+            .query_row("SELECT id FROM habits WHERE name = 'Stretch'", [], |row| {
+                row.get(0)
+            })
             .expect("read habit id");
         set_paused(&connection, habit_id, true).expect("pause habit");
         assert!(record_measurement_for_today(&connection, habit_id, 20.0).is_err());
