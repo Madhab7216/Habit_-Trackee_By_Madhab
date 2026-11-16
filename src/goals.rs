@@ -4,6 +4,7 @@
 //! excluded from the progress denominator and shown separately; no progress is
 //! fabricated when a goal has no eligible milestones.
 
+use crate::i18n;
 use gtk::prelude::*;
 use rusqlite::{Connection, Result, params};
 use std::{
@@ -339,7 +340,7 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     }
 
     let window = gtk::Window::builder()
-        .title("Goals & milestones")
+        .title(i18n::tr("Goals & milestones"))
         .transient_for(parent)
         .default_width(820)
         .default_height(680)
@@ -351,24 +352,24 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     root.set_margin_start(28);
     root.set_margin_end(28);
 
-    let title = gtk::Label::new(Some("Goals & milestones"));
+    let title = gtk::Label::new(Some(&i18n::tr("Goals & milestones")));
     title.add_css_class("title-1");
     title.set_xalign(0.0);
-    let subtitle = gtk::Label::new(Some(
+    let subtitle = gtk::Label::new(Some(&i18n::tr(
         "Turn long-term goals into clear, measurable milestones. Progress is based on completed milestones.",
-    ));
+    )));
     subtitle.add_css_class("dim-label");
     subtitle.set_xalign(0.0);
     subtitle.set_wrap(true);
 
     let form = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let title_entry = gtk::Entry::new();
-    title_entry.set_placeholder_text(Some("New goal title"));
+    title_entry.set_placeholder_text(Some(&i18n::tr("New goal title")));
     title_entry.set_hexpand(true);
     let date_entry = gtk::Entry::new();
-    date_entry.set_placeholder_text(Some("Target date · YYYY-MM-DD"));
+    date_entry.set_placeholder_text(Some(&i18n::tr("Target date · YYYY-MM-DD")));
     date_entry.set_width_chars(18);
-    let add_button = gtk::Button::with_label("Add goal");
+    let add_button = gtk::Button::with_label(&i18n::tr("Add goal"));
     add_button.add_css_class("suggested-action");
     form.append(&title_entry);
     form.append(&date_entry);
@@ -379,7 +380,7 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     feedback.add_css_class("error");
 
     let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    let archived_button = gtk::Button::with_label("Show archived");
+    let archived_button = gtk::Button::with_label(&i18n::tr("Show archived"));
     toolbar.append(&archived_button);
 
     let list = gtk::ListBox::new();
@@ -420,10 +421,13 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
                 add_date.set_text("");
                 add_feedback.set_text("");
                 add_mode.set(false);
-                archived_for_add.set_label("Show archived");
+                archived_for_add.set_label(&i18n::tr("Show archived"));
                 refresh_goal_list(&add_list, &add_window, &add_connection, false);
             }
-            Err(error) => add_feedback.set_text(&format!("Could not create goal: {error}")),
+            Err(error) => add_feedback.set_text(&i18n::format(
+                "Could not create goal: {0}",
+                &[&i18n::error(&error)],
+            )),
         }
     });
 
@@ -435,11 +439,12 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     archived_button.connect_clicked(move |_| {
         let show_archived = !toggle_mode.get();
         toggle_mode.set(show_archived);
-        toggle_button.set_label(if show_archived {
-            "Back to goals"
+        let label = if show_archived {
+            i18n::tr("Back to goals")
         } else {
-            "Show archived"
-        });
+            i18n::tr("Show archived")
+        };
+        toggle_button.set_label(&label);
         refresh_goal_list(
             &toggle_list,
             &toggle_window,
@@ -465,20 +470,21 @@ fn refresh_goal_list(
     let goals = match list_goals(&connection.borrow(), archived_view) {
         Ok(goals) => goals,
         Err(error) => {
-            append_list_message(list, &format!("Could not load goals: {error}"));
+            append_list_message(
+                list,
+                &i18n::format("Could not load goals: {0}", &[&i18n::error(&error)]),
+            );
             return;
         }
     };
 
     if goals.is_empty() {
-        append_list_message(
-            list,
-            if archived_view {
-                "No archived goals."
-            } else {
-                "No goals yet. Add your first goal above."
-            },
-        );
+        let empty_message = if archived_view {
+            i18n::tr("No archived goals.")
+        } else {
+            i18n::tr("No goals yet. Add your first goal above.")
+        };
+        append_list_message(list, &empty_message);
         return;
     }
 
@@ -494,13 +500,12 @@ fn refresh_goal_list(
         title.add_css_class("heading");
         title.set_xalign(0.0);
         title.set_hexpand(true);
-        let target = gtk::Label::new(Some(
-            goal.target_date
-                .as_deref()
-                .map(|date| format!("Target {date}"))
-                .unwrap_or_else(|| "No target date".to_string())
-                .as_str(),
-        ));
+        let target_text = goal
+            .target_date
+            .as_deref()
+            .map(|date| i18n::format("Target {0}", &[date]))
+            .unwrap_or_else(|| i18n::tr("No target date"));
+        let target = gtk::Label::new(Some(&target_text));
         target.add_css_class("dim-label");
         heading.append(&title);
         heading.append(&target);
@@ -508,18 +513,24 @@ fn refresh_goal_list(
         let progress = gtk::ProgressBar::new();
         progress.set_show_text(true);
         progress.set_fraction(f64::from(goal.progress_percent) / 100.0);
-        progress.set_text(Some(&format!(
-            "{}% · {}/{} milestones · {} skipped · {} linked habits",
-            goal.progress_percent,
-            goal.milestone_completed,
-            goal.milestone_total.saturating_sub(goal.milestone_skipped),
-            goal.milestone_skipped,
-            goal.linked_habits
-        )));
+        let progress_text = i18n::format(
+            "{0}% · {1}/{2} milestones · {3} skipped · {4} linked habits",
+            &[
+                &goal.progress_percent.to_string(),
+                &goal.milestone_completed.to_string(),
+                &goal
+                    .milestone_total
+                    .saturating_sub(goal.milestone_skipped)
+                    .to_string(),
+                &goal.milestone_skipped.to_string(),
+                &goal.linked_habits.to_string(),
+            ],
+        );
+        progress.set_text(Some(&progress_text));
 
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let milestones_button = gtk::Button::with_label("Milestones");
-        let edit_button = gtk::Button::with_label("Edit");
+        let milestones_button = gtk::Button::with_label(&i18n::tr("Milestones"));
+        let edit_button = gtk::Button::with_label(&i18n::tr("Edit"));
         edit_button.set_sensitive(!archived_view);
         actions.append(&milestones_button);
         actions.append(&edit_button);
@@ -553,7 +564,7 @@ fn refresh_goal_list(
         });
 
         if archived_view {
-            let restore_button = gtk::Button::with_label("Restore");
+            let restore_button = gtk::Button::with_label(&i18n::tr("Restore"));
             let restore_parent = parent.clone();
             let restore_list = list.clone();
             let restore_connection = Rc::clone(connection);
@@ -568,12 +579,13 @@ fn refresh_goal_list(
             });
             actions.append(&restore_button);
         } else {
-            let state_action = gtk::Button::with_label(match goal.status.as_str() {
-                "active" => "Pause",
-                "paused" => "Resume",
-                "completed" => "Reopen",
-                _ => "Archive",
-            });
+            let state_label = match goal.status.as_str() {
+                "active" => i18n::tr("Pause"),
+                "paused" => i18n::tr("Resume"),
+                "completed" => i18n::tr("Reopen"),
+                _ => i18n::tr("Archive"),
+            };
+            let state_action = gtk::Button::with_label(&state_label);
             let new_status = match goal.status.as_str() {
                 "active" => "paused",
                 "paused" | "completed" => "active",
@@ -593,7 +605,7 @@ fn refresh_goal_list(
             });
             actions.append(&state_action);
 
-            let complete_button = gtk::Button::with_label("Complete goal");
+            let complete_button = gtk::Button::with_label(&i18n::tr("Complete goal"));
             complete_button.set_sensitive(goal.status != "completed");
             let complete_parent = parent.clone();
             let complete_list = list.clone();
@@ -614,7 +626,7 @@ fn refresh_goal_list(
             });
             actions.append(&complete_button);
 
-            let archive_button = gtk::Button::with_label("Archive");
+            let archive_button = gtk::Button::with_label(&i18n::tr("Archive"));
             let archive_parent = parent.clone();
             let archive_list = list.clone();
             let archive_connection = Rc::clone(connection);
@@ -647,7 +659,7 @@ fn open_goal_editor(
     archived_view: bool,
 ) {
     let editor = gtk::Window::builder()
-        .title("Edit goal")
+        .title(i18n::tr("Edit goal"))
         .transient_for(parent)
         .modal(true)
         .default_width(440)
@@ -661,21 +673,21 @@ fn open_goal_editor(
 
     let title = gtk::Entry::new();
     title.set_text(&goal.title);
-    title.set_placeholder_text(Some("Goal title"));
+    title.set_placeholder_text(Some(&i18n::tr("Goal title")));
     let description = gtk::Entry::new();
     description.set_text(&goal.description);
-    description.set_placeholder_text(Some("Short description"));
+    description.set_placeholder_text(Some(&i18n::tr("Short description")));
     let target_date = gtk::Entry::new();
     target_date.set_text(goal.target_date.as_deref().unwrap_or(""));
-    target_date.set_placeholder_text(Some("Target date · YYYY-MM-DD (optional)"));
+    target_date.set_placeholder_text(Some(&i18n::tr("Target date · YYYY-MM-DD (optional)")));
     let feedback = gtk::Label::new(None);
     feedback.add_css_class("error");
     feedback.set_xalign(0.0);
 
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     actions.set_halign(gtk::Align::End);
-    let cancel = gtk::Button::with_label("Cancel");
-    let save = gtk::Button::with_label("Save changes");
+    let cancel = gtk::Button::with_label(&i18n::tr("Cancel"));
+    let save = gtk::Button::with_label(&i18n::tr("Save changes"));
     save.add_css_class("suggested-action");
     actions.append(&cancel);
     actions.append(&save);
@@ -711,7 +723,10 @@ fn open_goal_editor(
                 save_editor.close();
                 refresh_goal_list(&save_list, &save_parent, &save_connection, archived_view);
             }
-            Err(error) => save_feedback.set_text(&format!("Could not update goal: {error}")),
+            Err(error) => save_feedback.set_text(&i18n::format(
+                "Could not update goal: {0}",
+                &[&i18n::error(&error)],
+            )),
         }
     });
     let cancel_editor = editor.clone();
@@ -727,7 +742,7 @@ fn open_milestones_window(
     goal_title: &str,
 ) {
     let window = gtk::Window::builder()
-        .title(format!("Milestones · {goal_title}"))
+        .title(i18n::format("Milestones · {0}", &[goal_title]))
         .transient_for(parent)
         .default_width(680)
         .default_height(560)
@@ -743,12 +758,12 @@ fn open_milestones_window(
     heading.set_xalign(0.0);
     let form = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let title_entry = gtk::Entry::new();
-    title_entry.set_placeholder_text(Some("New milestone"));
+    title_entry.set_placeholder_text(Some(&i18n::tr("New milestone")));
     title_entry.set_hexpand(true);
     let date_entry = gtk::Entry::new();
-    date_entry.set_placeholder_text(Some("Due · YYYY-MM-DD"));
+    date_entry.set_placeholder_text(Some(&i18n::tr("Due · YYYY-MM-DD")));
     date_entry.set_width_chars(16);
-    let add_button = gtk::Button::with_label("Add");
+    let add_button = gtk::Button::with_label(&i18n::tr("Add"));
     add_button.add_css_class("suggested-action");
     form.append(&title_entry);
     form.append(&date_entry);
@@ -792,7 +807,10 @@ fn open_milestones_window(
                 add_feedback.set_text("");
                 refresh_milestone_list(&add_list, &add_window, &add_connection, goal_id);
             }
-            Err(error) => add_feedback.set_text(&format!("Could not add milestone: {error}")),
+            Err(error) => add_feedback.set_text(&i18n::format(
+                "Could not add milestone: {0}",
+                &[&i18n::error(&error)],
+            )),
         }
     });
 
@@ -813,13 +831,19 @@ fn refresh_milestone_list(
     let milestones = match list_milestones(&connection.borrow(), goal_id) {
         Ok(milestones) => milestones,
         Err(error) => {
-            append_list_message(list, &format!("Could not load milestones: {error}"));
+            append_list_message(
+                list,
+                &i18n::format("Could not load milestones: {0}", &[&i18n::error(&error)]),
+            );
             return;
         }
     };
 
     if milestones.is_empty() {
-        append_list_message(list, "No milestones yet. Add the first step above.");
+        append_list_message(
+            list,
+            &i18n::tr("No milestones yet. Add the first step above."),
+        );
         return;
     }
 
@@ -832,21 +856,27 @@ fn refresh_milestone_list(
         let name = gtk::Label::new(Some(&milestone.title));
         name.set_xalign(0.0);
         name.set_hexpand(true);
-        let due = milestone.due_date.as_deref().unwrap_or("No due date");
-        let status = gtk::Label::new(Some(match milestone.status.as_str() {
-            "completed" => "Completed",
-            "skipped" => "Skipped",
+        let due = milestone
+            .due_date
+            .as_deref()
+            .map(str::to_string)
+            .unwrap_or_else(|| i18n::tr("No due date"));
+        let status_text = match milestone.status.as_str() {
+            "completed" => i18n::tr("Completed"),
+            "skipped" => i18n::tr("Skipped"),
             _ => due,
-        }));
+        };
+        let status = gtk::Label::new(Some(&status_text));
         status.add_css_class("dim-label");
         let next_status = match milestone.status.as_str() {
             "completed" => "pending",
             _ => "completed",
         };
-        let complete = gtk::Button::with_label(match milestone.status.as_str() {
-            "completed" => "Reopen",
-            _ => "Complete",
-        });
+        let complete_label = match milestone.status.as_str() {
+            "completed" => i18n::tr("Reopen"),
+            _ => i18n::tr("Complete"),
+        };
+        let complete = gtk::Button::with_label(&complete_label);
         let milestone_connection = Rc::clone(connection);
         let milestone_list = list.clone();
         let milestone_parent = parent.clone();
@@ -865,11 +895,12 @@ fn refresh_milestone_list(
             );
         });
 
-        let skip = gtk::Button::with_label(if milestone.status == "skipped" {
-            "Reopen"
+        let skip_label = if milestone.status == "skipped" {
+            i18n::tr("Reopen")
         } else {
-            "Skip"
-        });
+            i18n::tr("Skip")
+        };
+        let skip = gtk::Button::with_label(&skip_label);
         let skip_connection = Rc::clone(connection);
         let skip_list = list.clone();
         let skip_parent = parent.clone();

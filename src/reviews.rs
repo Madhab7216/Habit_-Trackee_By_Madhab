@@ -4,6 +4,7 @@
 //! Activity summaries count persisted records only; they do not estimate adherence,
 //! missed opportunities, or psychological/clinical outcomes.
 
+use crate::i18n;
 use gtk::prelude::*;
 use rusqlite::{Connection, OptionalExtension, Result, params};
 use std::{cell::RefCell, rc::Rc};
@@ -98,11 +99,11 @@ fn validate_start(connection: &Connection, kind: &str, value: &str) -> Result<St
     Ok(value.to_string())
 }
 
-fn validate_note<'a>(value: &'a str, field: &str) -> Result<&'a str> {
+fn validate_note<'a>(value: &'a str) -> Result<&'a str> {
     if value.chars().count() > MAX_NOTE_CHARS {
-        return Err(invalid_field(&format!(
-            "{field} must be 8,000 characters or fewer"
-        )));
+        return Err(invalid_field(
+            "review note must be 8,000 characters or fewer",
+        ));
     }
     Ok(value)
 }
@@ -195,10 +196,10 @@ pub fn save_review(
     ensure_schema(connection)?;
     let kind = validate_kind(kind)?;
     let start = validate_start(connection, kind, period_start)?;
-    let went_well = validate_note(went_well, "wins")?;
-    let challenges = validate_note(challenges, "challenges")?;
-    let lessons = validate_note(lessons, "lessons")?;
-    let next_focus = validate_note(next_focus, "next focus")?;
+    let went_well = validate_note(went_well)?;
+    let challenges = validate_note(challenges)?;
+    let lessons = validate_note(lessons)?;
+    let next_focus = validate_note(next_focus)?;
 
     connection.query_row(
         "INSERT INTO period_reviews
@@ -248,6 +249,16 @@ pub fn activity_summary(
                 skipped: row.get::<_, i64>(2)?.try_into().unwrap_or(0),
             })
         },
+    )
+}
+
+fn summary_text(counts: ActivitySummary) -> String {
+    let completed = counts.completed.to_string();
+    let partial = counts.partial.to_string();
+    let skipped = counts.skipped.to_string();
+    i18n::format(
+        "Saved records only · {0} completed · {1} partial · {2} skipped. This is not an adherence score.",
+        &[&completed, &partial, &skipped],
     )
 }
 
@@ -302,9 +313,10 @@ fn refresh_editor(
     let review = match load_review(connection, kind, start) {
         Ok(review) => review,
         Err(error) => {
-            widgets
-                .feedback
-                .set_text(&format!("Could not load review: {error}"));
+            widgets.feedback.set_text(&i18n::format(
+                "Could not load review: {0}",
+                &[&i18n::error(&error)],
+            ));
             return;
         }
     };
@@ -315,27 +327,23 @@ fn refresh_editor(
             set_text(widgets.challenges, &review.challenges);
             set_text(widgets.lessons, &review.lessons);
             set_text(widgets.next_focus, &review.next_focus);
-            widgets
-                .feedback
-                .set_text("Saved review loaded from this device.");
+            widgets.feedback.set_text(&i18n::tr("Saved review loaded from this device."));
         }
         None => {
             set_text(widgets.wins, "");
             set_text(widgets.challenges, "");
             set_text(widgets.lessons, "");
             set_text(widgets.next_focus, "");
-            widgets
-                .feedback
-                .set_text("No review saved for this period yet.");
+            widgets.feedback.set_text(&i18n::tr("No review saved for this period yet."));
         }
     }
 
     match activity_summary(connection, kind, start) {
-        Ok(counts) => widgets.summary.set_text(&format!(
-            "Saved records only · {} completed · {} partial · {} skipped. This is not an adherence score.",
-            counts.completed, counts.partial, counts.skipped
+        Ok(counts) => widgets.summary.set_text(&summary_text(counts)),
+        Err(error) => widgets.summary.set_text(&i18n::format(
+            "Activity summary unavailable: {0}",
+            &[&i18n::error(&error)],
         )),
-        Err(error) => widgets.summary.set_text(&format!("Activity summary unavailable: {error}")),
     }
 }
 
@@ -347,7 +355,7 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     }
 
     let window = gtk::Window::builder()
-        .title("Weekly & Monthly Reviews")
+        .title(i18n::tr("Weekly & Monthly Reviews"))
         .transient_for(parent)
         .default_width(820)
         .default_height(760)
@@ -359,48 +367,55 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     root.set_margin_start(24);
     root.set_margin_end(24);
 
-    let heading = gtk::Label::new(Some("Reflect and plan"));
+    let heading = gtk::Label::new(Some(&i18n::tr("Reflect and plan")));
     heading.add_css_class("title-1");
     heading.set_xalign(0.0);
-    let description = gtk::Label::new(Some(
+    let description = gtk::Label::new(Some(&i18n::tr(
         "Private reflections stored on this device. Choose a Monday for a weekly review or the first day of a month for a monthly review.",
-    ));
+    )));
     description.set_wrap(true);
     description.set_xalign(0.0);
     description.add_css_class("dim-label");
 
     let period_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    let period_kind = gtk::DropDown::from_strings(&["Weekly · Monday to Sunday", "Monthly"]);
+    let period_labels = [
+        i18n::tr("Weekly · Monday to Sunday"),
+        i18n::tr("Monthly"),
+    ];
+    let period_label_refs = period_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let period_kind = gtk::DropDown::from_strings(&period_label_refs);
     let period_start = gtk::Entry::new();
     period_start.set_width_chars(14);
     period_start.set_placeholder_text(Some("YYYY-MM-DD"));
-    period_start.set_tooltip_text(Some("Week: Monday start date. Month: first calendar day."));
-    let use_current = gtk::Button::with_label("Current period");
-    let load = gtk::Button::with_label("Load");
+    period_start.set_tooltip_text(Some(&i18n::tr(
+        "Week: Monday start date. Month: first calendar day.",
+    )));
+    let use_current = gtk::Button::with_label(&i18n::tr("Current period"));
+    let load = gtk::Button::with_label(&i18n::tr("Load"));
     period_row.append(&period_kind);
     period_row.append(&period_start);
     period_row.append(&use_current);
     period_row.append(&load);
 
-    let summary = gtk::Label::new(Some("Activity summary will appear here."));
+    let summary = gtk::Label::new(Some(&i18n::tr("Activity summary will appear here.")));
     summary.set_xalign(0.0);
     summary.add_css_class("dim-label");
     summary.set_wrap(true);
     let (wins_field, wins) = note_field(
-        "What went well?",
-        "Record helpful routines, completed actions, or progress you want to remember.",
+        &i18n::tr("What went well?"),
+        &i18n::tr("Record helpful routines, completed actions, or progress you want to remember."),
     );
     let (challenges_field, challenges) = note_field(
-        "What was difficult?",
-        "Note obstacles or friction without treating a missed action as a personal failure.",
+        &i18n::tr("What was difficult?"),
+        &i18n::tr("Note obstacles or friction without treating a missed action as a personal failure."),
     );
     let (lessons_field, lessons) = note_field(
-        "What did I learn?",
-        "Capture what worked, what did not, and one adjustment worth testing.",
+        &i18n::tr("What did I learn?"),
+        &i18n::tr("Capture what worked, what did not, and one adjustment worth testing."),
     );
     let (focus_field, next_focus) = note_field(
-        "What will I focus on next?",
-        "Write a small, actionable focus for the next week or month.",
+        &i18n::tr("What will I focus on next?"),
+        &i18n::tr("Write a small, actionable focus for the next week or month."),
     );
 
     let notes_scroller = gtk::ScrolledWindow::new();
@@ -419,7 +434,7 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
 
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     actions.set_halign(gtk::Align::End);
-    let save = gtk::Button::with_label("Save review");
+    let save = gtk::Button::with_label(&i18n::tr("Save review"));
     save.add_css_class("suggested-action");
     actions.append(&save);
 
@@ -461,7 +476,10 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
                 refresh_editor(&current_connection.borrow(), kind, &start, &widgets);
             }
             Err(error) => {
-                current_feedback.set_text(&format!("Could not find current period: {error}"))
+                current_feedback.set_text(&i18n::format(
+                    "Could not find current period: {0}",
+                    &[&i18n::error(&error)],
+                ))
             }
         }
     });
@@ -518,16 +536,19 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
             &read_text(&save_next_focus),
         ) {
             Ok(_) => {
-                save_feedback.set_text("Review saved locally.");
+                save_feedback.set_text(&i18n::tr("Review saved locally."));
                 match activity_summary(&save_connection.borrow(), kind, &save_start.text()) {
-                    Ok(counts) => save_summary.set_text(&format!(
-                        "Saved records only · {} completed · {} partial · {} skipped. This is not an adherence score.",
-                        counts.completed, counts.partial, counts.skipped
+                    Ok(counts) => save_summary.set_text(&summary_text(counts)),
+                    Err(error) => save_summary.set_text(&i18n::format(
+                        "Activity summary unavailable: {0}",
+                        &[&i18n::error(&error)],
                     )),
-                    Err(error) => save_summary.set_text(&format!("Activity summary unavailable: {error}")),
                 }
             }
-            Err(error) => save_feedback.set_text(&format!("Could not save review: {error}")),
+            Err(error) => save_feedback.set_text(&i18n::format(
+                "Could not save review: {0}",
+                &[&i18n::error(&error)],
+            )),
         }
     });
 
@@ -544,7 +565,10 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
             };
             refresh_editor(&connection.borrow(), "week", &start, &widgets);
         }
-        Err(error) => feedback.set_text(&format!("Could not initialize review window: {error}")),
+        Err(error) => feedback.set_text(&i18n::format(
+            "Could not initialize review window: {0}",
+            &[&i18n::error(&error)],
+        )),
     }
 
     window.present();
