@@ -14,6 +14,12 @@ pub struct TodayHabit {
     pub paused: bool,
     /// False means the habit is intentionally not due on the requested local date.
     pub scheduled: bool,
+    pub tracking_type: String,
+    pub direction: String,
+    pub target_value: Option<f64>,
+    pub unit: Option<String>,
+    pub recorded_value: Option<f64>,
+    pub entry_status: Option<String>,
 }
 
 pub fn open() -> Result<Connection> {
@@ -107,52 +113,94 @@ pub fn create_habit(connection: &Connection, name: &str) -> Result<()> {
 }
 
 /// Create a binary habit using a persisted and validated recurrence rule.
-/// A weekly-frequency habit is checked once on each completed session day;
-/// the weekly quota is stored independently in target_per_period.
 pub fn create_habit_with_cadence(
     connection: &Connection,
     name: &str,
     cadence: Cadence,
+) -> Result<()> {
+    create_habit_with_tracking(connection, name, cadence, "binary", None, None, "at_least")
+}
+
+/// Create a measured habit. Weekly-frequency cadence remains a session-based habit.
+pub fn create_habit_with_tracking(
+    connection: &Connection,
+    name: &str,
+    cadence: Cadence,
+    tracking_type: &str,
+    target_value: Option<f64>,
+    unit: Option<&str>,
+    direction: &str,
 ) -> Result<()> {
     let normalized = validate_habit_name(name)?;
     let start_date = local_today(connection)?;
     HabitSchedule::new(cadence, start_date, None)
         .map_err(|_| invalid_schedule_field("new schedule"))?;
 
-    let (schedule_type, weekday_mask, interval_days, target_per_period, tracking_type) =
-        match cadence {
-            Cadence::Daily => ("daily", None, None, None, "binary"),
-            Cadence::Weekdays { weekday_mask } => (
-                "weekdays",
-                Some(i64::from(weekday_mask)),
-                None,
-                None,
-                "binary",
-            ),
-            Cadence::EveryNDays { interval } => (
-                "every_n_days",
-                None,
-                Some(i64::from(interval)),
-                None,
-                "binary",
-            ),
-            Cadence::TimesPerWeek { target } => (
-                "times_per_week",
-                None,
-                None,
-                Some(i64::from(target)),
-                "frequency",
-            ),
+    let (schedule_type, weekday_mask, interval_days, target_per_period) = match cadence {
+        Cadence::Daily => ("daily", None, None, None),
+        Cadence::Weekdays { weekday_mask } => {
+            ("weekdays", Some(i64::from(weekday_mask)), None, None)
+        }
+        Cadence::EveryNDays { interval } => {
+            ("every_n_days", None, Some(i64::from(interval)), None)
+        }
+        Cadence::TimesPerWeek { target } => (
+            "times_per_week",
+            None,
+            None,
+            Some(i64::from(target)),
+        ),
+    };
+
+    let (stored_type, stored_direction, stored_target, stored_unit) =
+        if matches!(cadence, Cadence::TimesPerWeek { .. }) {
+            ("frequency", "at_least", None, None)
+        } else {
+            match tracking_type {
+                "binary" => ("binary", "at_least", None, None),
+                "numeric" | "count" | "duration" | "limit" => {
+                    let target = target_value
+                        .filter(|value| value.is_finite() && *value > 0.0)
+                        .ok_or_else(|| invalid_measurement_field("target_value"))?;
+                    let normalized_unit = unit
+                        .map(str::trim)
+                        .filter(|value| {
+                            !value.is_empty()
+                                && value.chars().count() <= 24
+                                && !value.chars().any(char::is_control)
+                        })
+                        .ok_or_else(|| invalid_measurement_field("unit"))?;
+                    let selected_direction = if tracking_type == "limit" {
+                        "at_most"
+                    } else {
+                        match direction {
+                            "at_least" | "at_most" => direction,
+                            _ => return Err(invalid_measurement_field("direction")),
+                        }
+                    };
+                    (
+                        tracking_type,
+                        selected_direction,
+                        Some(target),
+                        Some(normalized_unit.to_string()),
+                    )
+                }
+                _ => return Err(invalid_measurement_field("tracking_type")),
+            }
         };
 
     connection.execute(
         "INSERT INTO habits
-            (name, tracking_type, schedule_type, weekday_mask, interval_days,
-             target_per_period, period_unit, start_date)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'week', ?7)",
+            (name, tracking_type, direction, target_value, unit,
+             schedule_type, weekday_mask, interval_days, target_per_period,
+             period_unit, start_date)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'week', ?10)",
         params![
             normalized,
-            tracking_type,
+            stored_type,
+            stored_direction,
+            stored_target,
+            stored_unit,
             schedule_type,
             weekday_mask,
             interval_days,
@@ -206,7 +254,8 @@ pub fn restore_habit(connection: &Connection, habit_id: i64) -> Result<()> {
 
 pub fn archived_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
     let mut statement = connection.prepare(
-        "SELECT id, name, 0, 0 FROM habits
+        "SELECT id, name, 0, 0, 'binary', 'at_least', NULL, NULL, NULL, NULL
+         FROM habits
          WHERE archived_at IS NOT NULL
          ORDER BY archived_at DESC, id DESC",
     )?;
@@ -217,6 +266,12 @@ pub fn archived_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
             completed: row.get::<_, i64>(2)? != 0,
             paused: row.get::<_, i64>(3)? != 0,
             scheduled: false,
+            tracking_type: row.get(4)?,
+            direction: row.get(5)?,
+            target_value: row.get(6)?,
+            unit: row.get(7)?,
+            recorded_value: row.get(8)?,
+            entry_status: row.get(9)?,
         })
     })?;
     rows.collect()
@@ -244,7 +299,12 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
                     WHERE p.habit_id = h.id
                       AND p.starts_on <= ?1
                       AND (p.ends_on IS NULL OR ?1 < p.ends_on)
-                ) AS paused
+                ) AS paused,
+                h.tracking_type, h.direction, h.target_value, h.unit,
+                (SELECT e.value FROM habit_entries e
+                 WHERE e.habit_id = h.id AND e.local_date = ?1) AS recorded_value,
+                (SELECT e.status FROM habit_entries e
+                 WHERE e.habit_id = h.id AND e.local_date = ?1) AS entry_status
          FROM habits h
          WHERE h.archived_at IS NULL
          ORDER BY h.sort_order, h.id",
@@ -266,9 +326,78 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
             completed: row.get::<_, i64>(8)? != 0,
             paused: row.get::<_, i64>(9)? != 0,
             scheduled: schedule.period_for(date).is_some(),
+            tracking_type: row.get(10)?,
+            direction: row.get(11)?,
+            target_value: row.get(12)?,
+            unit: row.get(13)?,
+            recorded_value: row.get(14)?,
+            entry_status: row.get(15)?,
         })
     })?;
     rows.collect()
+}
+
+fn invalid_measurement_field(field: &str) -> rusqlite::Error {
+    rusqlite::Error::InvalidParameterName(format!(
+        "invalid measured habit field: {field}"
+    ))
+}
+
+/// Persist today's actual value and return whether the configured target was met.
+/// Values are local to the current device and replace the same habit/date entry atomically.
+pub fn record_measurement_for_today(
+    connection: &Connection,
+    habit_id: i64,
+    actual_value: f64,
+) -> Result<bool> {
+    if !actual_value.is_finite() || actual_value < 0.0 {
+        return Err(invalid_measurement_field("actual_value"));
+    }
+
+    let date = local_today(connection)?;
+    let habit = habits_for_date(connection, date)?
+        .into_iter()
+        .find(|habit| habit.id == habit_id)
+        .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+
+    if habit.paused {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "a paused habit cannot be checked in".to_string(),
+        ));
+    }
+    if !habit.scheduled {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "a habit cannot be checked in on an unscheduled date".to_string(),
+        ));
+    }
+    if !matches!(
+        habit.tracking_type.as_str(),
+        "numeric" | "count" | "duration" | "limit"
+    ) {
+        return Err(invalid_measurement_field("tracking_type"));
+    }
+
+    let target = habit
+        .target_value
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .ok_or_else(|| invalid_measurement_field("target_value"))?;
+    let met_target = match habit.direction.as_str() {
+        "at_least" => actual_value >= target,
+        "at_most" => actual_value <= target,
+        _ => return Err(invalid_measurement_field("direction")),
+    };
+    let status = if met_target { "completed" } else { "partial" };
+
+    connection.execute(
+        "INSERT INTO habit_entries(habit_id, local_date, status, value)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(habit_id, local_date) DO UPDATE SET
+            status = excluded.status,
+            value = excluded.value,
+            updated_at = CURRENT_TIMESTAMP",
+        params![habit_id, date.to_string(), status, actual_value],
+    )?;
+    Ok(met_target)
 }
 
 fn local_today(connection: &Connection) -> Result<CivilDate> {
@@ -526,6 +655,153 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn measured_habit_creation_persists_type_target_unit_and_direction() {
+        let connection = memory_connection();
+        create_habit_with_tracking(
+            &connection,
+            "Read pages",
+            Cadence::Daily,
+            "numeric",
+            Some(20.0),
+            Some("pages"),
+            "at_least",
+        )
+        .expect("create measured habit");
+
+        let stored: (String, String, f64, String) = connection
+            .query_row(
+                "SELECT tracking_type, direction, target_value, unit
+                 FROM habits WHERE name = 'Read pages'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("read measured habit");
+        assert_eq!(
+            stored,
+            (
+                "numeric".to_string(),
+                "at_least".to_string(),
+                20.0,
+                "pages".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn measured_checkins_are_partial_or_completed_and_update_in_place() {
+        let connection = memory_connection();
+        create_habit_with_tracking(
+            &connection,
+            "Read pages",
+            Cadence::Daily,
+            "numeric",
+            Some(20.0),
+            Some("pages"),
+            "at_least",
+        )
+        .expect("create measured habit");
+        let habit_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Read pages'", [], |row| {
+                row.get(0)
+            })
+            .expect("read habit id");
+
+        assert!(!record_measurement_for_today(&connection, habit_id, 12.0)
+            .expect("save partial value"));
+        let partial = today_habits(&connection).expect("read partial habit");
+        assert_eq!(partial[0].entry_status.as_deref(), Some("partial"));
+        assert_eq!(partial[0].recorded_value, Some(12.0));
+
+        assert!(record_measurement_for_today(&connection, habit_id, 20.0)
+            .expect("save completed value"));
+        let completed = today_habits(&connection).expect("read completed habit");
+        assert!(completed[0].completed);
+        assert_eq!(completed[0].entry_status.as_deref(), Some("completed"));
+        assert_eq!(completed[0].recorded_value, Some(20.0));
+
+        let entry_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM habit_entries WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("count daily entries");
+        assert_eq!(entry_count, 1);
+    }
+
+    #[test]
+    fn limit_habits_use_at_most_direction() {
+        let connection = memory_connection();
+        create_habit_with_tracking(
+            &connection,
+            "Screen time",
+            Cadence::Daily,
+            "limit",
+            Some(2.0),
+            Some("hours"),
+            "at_least",
+        )
+        .expect("create limit habit");
+        let habit_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Screen time'", [], |row| {
+                row.get(0)
+            })
+            .expect("read habit id");
+
+        assert!(!record_measurement_for_today(&connection, habit_id, 3.0)
+            .expect("save over-limit value"));
+        assert!(record_measurement_for_today(&connection, habit_id, 2.0)
+            .expect("save within-limit value"));
+        let stored_direction: String = connection
+            .query_row(
+                "SELECT direction FROM habits WHERE id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("read direction");
+        assert_eq!(stored_direction, "at_most");
+    }
+
+    #[test]
+    fn measured_habits_reject_invalid_configuration_and_values() {
+        let connection = memory_connection();
+        assert!(create_habit_with_tracking(
+            &connection, "No target", Cadence::Daily, "numeric", Some(0.0), Some("pages"), "at_least"
+        ).is_err());
+        assert!(create_habit_with_tracking(
+            &connection, "No unit", Cadence::Daily, "count", Some(3.0), Some("  "), "at_least"
+        ).is_err());
+        assert!(create_habit_with_tracking(
+            &connection, "Bad type", Cadence::Daily, "unknown", Some(3.0), Some("pages"), "at_least"
+        ).is_err());
+        assert!(create_habit_with_tracking(
+            &connection, "Bad direction", Cadence::Daily, "numeric", Some(3.0), Some("pages"), "unknown"
+        ).is_err());
+
+        create_habit_with_tracking(
+            &connection, "Valid", Cadence::Daily, "numeric", Some(3.0), Some("pages"), "at_least"
+        ).expect("create valid habit");
+        let habit_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Valid'", [], |row| row.get(0))
+            .expect("read habit id");
+        assert!(record_measurement_for_today(&connection, habit_id, f64::NAN).is_err());
+        assert!(record_measurement_for_today(&connection, habit_id, -1.0).is_err());
+    }
+
+    #[test]
+    fn measured_checkins_reject_paused_habits() {
+        let connection = memory_connection();
+        create_habit_with_tracking(
+            &connection, "Stretch", Cadence::Daily, "duration", Some(15.0), Some("minutes"), "at_least"
+        ).expect("create measured habit");
+        let habit_id: i64 = connection
+            .query_row("SELECT id FROM habits WHERE name = 'Stretch'", [], |row| row.get(0))
+            .expect("read habit id");
+        set_paused(&connection, habit_id, true).expect("pause habit");
+        assert!(record_measurement_for_today(&connection, habit_id, 20.0).is_err());
     }
 
     #[test]
