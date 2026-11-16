@@ -1011,14 +1011,18 @@ mod tests {
     fn future_schedule_change_preserves_the_existing_schedule_end_date() {
         let connection = memory_connection();
         let end_text: String = connection
-            .query_row("SELECT date('now', 'localtime', '+3 day')", [], |row| row.get(0))
+            .query_row("SELECT date('now', 'localtime', '+3 day')", [], |row| {
+                row.get(0)
+            })
             .expect("read schedule end date");
         let end = parse_civil_date(&end_text).expect("parse schedule end date");
-        connection.execute(
-            "INSERT INTO habits(name, start_date, end_date)
-             VALUES ('Seasonal habit', date('now', 'localtime'), ?1)",
-            [end_text],
-        ).expect("insert habit with an end date");
+        connection
+            .execute(
+                "INSERT INTO habits(name, start_date, end_date)
+                 VALUES ('Seasonal habit', date('now', 'localtime'), ?1)",
+                [end_text],
+            )
+            .expect("insert habit with an end date");
         let habit_id = connection.last_insert_rowid();
         let from_text: String = connection
             .query_row("SELECT date('now', 'localtime', '+1 day')", [], |row| row.get(0))
@@ -1028,9 +1032,12 @@ mod tests {
         change_habit_schedule(
             &connection,
             habit_id,
-            Cadence::Weekdays { weekday_mask: 0b001_1111 },
+            Cadence::Weekdays {
+                weekday_mask: 0b001_1111,
+            },
             from,
-        ).expect("change future schedule");
+        )
+        .expect("change future schedule");
 
         let schedule = habit_schedule_for_date(&connection, habit_id, from)
             .expect("read new schedule")
