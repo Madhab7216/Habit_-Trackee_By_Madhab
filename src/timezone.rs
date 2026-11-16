@@ -5,9 +5,9 @@
 //! separately classified as unique, a DST gap, or a DST fold.
 
 use jiff::{
+    Timestamp, ZonedDateTime,
     civil::{Date, DateTime},
     tz::{AmbiguousOffset, TimeZone},
-    Timestamp, ZonedDateTime,
 };
 use std::fmt;
 
@@ -26,16 +26,25 @@ impl fmt::Display for ZoneIdError {
         match self {
             Self::EmptyIdentifier => write!(formatter, "time-zone identifier is empty"),
             Self::SurroundingWhitespace => {
-                write!(formatter, "time-zone identifier must not contain surrounding whitespace")
+                write!(
+                    formatter,
+                    "time-zone identifier must not contain surrounding whitespace"
+                )
             }
             Self::UnknownIdentifier(identifier) => {
                 write!(formatter, "unknown IANA time-zone identifier: {identifier}")
             }
             Self::NotIanaIdentifier(identifier) => {
-                write!(formatter, "time-zone value is not a named IANA zone: {identifier}")
+                write!(
+                    formatter,
+                    "time-zone value is not a named IANA zone: {identifier}"
+                )
             }
             Self::SystemZoneHasNoIanaIdentifier => {
-                write!(formatter, "the system time zone could not be resolved to an IANA identifier")
+                write!(
+                    formatter,
+                    "the system time zone could not be resolved to an IANA identifier"
+                )
             }
         }
     }
@@ -214,38 +223,21 @@ mod tests {
     #[test]
     fn local_midnight_boundary_is_not_assumed_to_be_utc_midnight() {
         let kolkata = zone("Asia/Kolkata");
-        let before: Timestamp = "2026-11-17T18:29:59Z"
-            .parse()
-            .expect("valid instant");
-        let at_midnight: Timestamp = "2026-11-17T18:30:00Z"
-            .parse()
-            .expect("valid instant");
+        let before: Timestamp = "2026-11-17T18:29:59Z".parse().expect("valid instant");
+        let at_midnight: Timestamp = "2026-11-17T18:30:00Z".parse().expect("valid instant");
 
         assert_eq!(kolkata.local_date_at(before).to_string(), "2026-11-17");
-        assert_eq!(
-            kolkata.local_date_at(at_midnight).to_string(),
-            "2026-11-18"
-        );
+        assert_eq!(kolkata.local_date_at(at_midnight).to_string(), "2026-11-18");
     }
 
     #[test]
     fn skipped_civil_date_is_not_emulated_by_adding_24_hours() {
         let apia = zone("Pacific/Apia");
-        let before_skip: Timestamp = "2011-12-30T09:59:59Z"
-            .parse()
-            .expect("valid instant");
-        let after_skip: Timestamp = "2011-12-30T10:00:00Z"
-            .parse()
-            .expect("valid instant");
+        let before_skip: Timestamp = "2011-12-30T09:59:59Z".parse().expect("valid instant");
+        let after_skip: Timestamp = "2011-12-30T10:00:00Z".parse().expect("valid instant");
 
-        assert_eq!(
-            apia.local_date_at(before_skip).to_string(),
-            "2011-12-29"
-        );
-        assert_eq!(
-            apia.local_date_at(after_skip).to_string(),
-            "2011-12-31"
-        );
+        assert_eq!(apia.local_date_at(before_skip).to_string(), "2011-12-29");
+        assert_eq!(apia.local_date_at(after_skip).to_string(), "2011-12-31");
     }
 
     #[test]
@@ -313,8 +305,14 @@ mod tests {
             .resolve_local_datetime(gap, DisambiguationPolicy::Compatible)
             .expect("compatible gap resolution");
 
-        assert_eq!(earlier.to_string(), "2024-03-10T01:30:00-05:00[America/New_York]");
-        assert_eq!(later.to_string(), "2024-03-10T03:30:00-04:00[America/New_York]");
+        assert_eq!(
+            earlier.to_string(),
+            "2024-03-10T01:30:00-05:00[America/New_York]"
+        );
+        assert_eq!(
+            later.to_string(),
+            "2024-03-10T03:30:00-04:00[America/New_York]"
+        );
         assert_eq!(compatible, later);
     }
 
@@ -333,8 +331,14 @@ mod tests {
             .resolve_local_datetime(fold, DisambiguationPolicy::Compatible)
             .expect("compatible fold resolution");
 
-        assert_eq!(earlier.to_string(), "2024-11-03T01:30:00-04:00[America/New_York]");
-        assert_eq!(later.to_string(), "2024-11-03T01:30:00-05:00[America/New_York]");
+        assert_eq!(
+            earlier.to_string(),
+            "2024-11-03T01:30:00-04:00[America/New_York]"
+        );
+        assert_eq!(
+            later.to_string(),
+            "2024-11-03T01:30:00-05:00[America/New_York]"
+        );
         assert_eq!(compatible, earlier);
     }
 }

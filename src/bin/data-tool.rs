@@ -4,6 +4,10 @@ pub mod db;
 pub mod domain;
 #[path = "../portability.rs"]
 pub mod portability;
+#[path = "../schedule_history.rs"]
+pub mod schedule_history;
+#[path = "../timezone.rs"]
+pub mod timezone;
 
 use std::{env, error::Error, io, path::Path, process::ExitCode};
 

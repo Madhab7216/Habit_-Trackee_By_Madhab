@@ -15,6 +15,7 @@ use std::{
 pub type PortabilityResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 const CURRENT_SCHEMA_VERSION: i64 = 2;
+const CURRENT_SCHEDULE_HISTORY_VERSION: i64 = 1;
 const EXPORT_FORMAT_VERSION: u32 = 1;
 const EXPORT_TABLES: &[&str] = &[
     "categories",
@@ -152,7 +153,52 @@ pub fn verify_database(connection: &Connection) -> PortabilityResult<i64> {
         }
     }
 
+    verify_schedule_history(connection)?;
     Ok(version)
+}
+
+/// Validate the additive schedule-history ledger without changing the core schema version.
+/// Databases created before the history service existed remain valid until upgraded by db::open.
+fn verify_schedule_history(connection: &Connection) -> PortabilityResult<()> {
+    if !table_exists(connection, "schedule_history_migrations")? {
+        return Ok(());
+    }
+
+    let history_version: i64 = connection.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM schedule_history_migrations",
+        [],
+        |row| row.get(0),
+    )?;
+    if history_version != CURRENT_SCHEDULE_HISTORY_VERSION {
+        return Err(invalid_data(format!(
+            "unsupported or incomplete schedule-history version {history_version}; this build supports version {CURRENT_SCHEDULE_HISTORY_VERSION}"
+        )).into());
+    }
+
+    if !table_exists(connection, "habit_schedule_revisions")? {
+        return Err(invalid_data(
+            "schedule-history migration ledger exists but habit_schedule_revisions is missing",
+        )
+        .into());
+    }
+
+    let habits_without_history: i64 = connection.query_row(
+        "SELECT COUNT(*)
+         FROM habits h
+         WHERE NOT EXISTS (
+             SELECT 1 FROM habit_schedule_revisions r WHERE r.habit_id = h.id
+         )",
+        [],
+        |row| row.get(0),
+    )?;
+    if habits_without_history != 0 {
+        return Err(invalid_data(format!(
+            "{habits_without_history} habits are missing a baseline schedule revision"
+        ))
+        .into());
+    }
+
+    Ok(())
 }
 
 /// Verify a backup file using a read-only SQLite connection.
@@ -384,7 +430,7 @@ mod tests {
     }
 
     fn populated_database() -> Connection {
-        let connection = Connection::open_in_memory().expect("open test database");
+        let mut connection = Connection::open_in_memory().expect("open test database");
         connection
             .execute_batch(include_str!("../migrations/0001_initial.sql"))
             .expect("apply schema v1");
@@ -476,6 +522,8 @@ mod tests {
                 [],
             )
             .expect("insert setting");
+        crate::schedule_history::initialize(&mut connection)
+            .expect("initialize schedule history for backup fixture");
 
         connection
     }
@@ -504,6 +552,13 @@ mod tests {
                 row.get(0)
             })
             .expect("count restored pause periods");
+        let revision_count: i64 = restored
+            .query_row(
+                "SELECT COUNT(*) FROM habit_schedule_revisions WHERE habit_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count restored schedule revisions");
         let goal_count: i64 = restored
             .query_row("SELECT COUNT(*) FROM goals", [], |row| row.get(0))
             .expect("count restored goals");
@@ -514,12 +569,22 @@ mod tests {
         assert_eq!(habit_name, "Drink \"water\", slowly\nand consistently");
         assert_eq!(entry_count, 1);
         assert_eq!(pause_count, 1);
+        assert_eq!(revision_count, 1);
         assert_eq!(goal_count, 1);
         assert_eq!(milestone_count, 1);
         drop(restored);
 
         fs::remove_file(backup_path).expect("remove test backup");
         fs::remove_file(restored_path).expect("remove restored test database");
+    }
+
+    #[test]
+    fn verification_rejects_a_schedule_history_ledger_with_a_missing_revision_table() {
+        let connection = populated_database();
+        connection
+            .execute_batch("DROP TABLE habit_schedule_revisions;")
+            .expect("remove schedule history table to simulate corruption");
+        assert!(verify_database(&connection).is_err());
     }
 
     #[test]

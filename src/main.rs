@@ -1,6 +1,8 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod schedule_history;
+pub mod timezone;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
