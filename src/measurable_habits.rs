@@ -145,6 +145,14 @@ pub struct MeasurementOutcome {
     pub unit: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeasurementRecord {
+    pub status: MeasurementStatus,
+    pub actual: f64,
+    pub note: String,
+}
+
+
 #[derive(Debug)]
 pub enum MeasurementError {
     Database(rusqlite::Error),
@@ -303,6 +311,66 @@ pub fn measurement_config(
         target,
         unit,
     })
+}
+
+/// Read the machine's current SQLite local civil date using the same source
+/// as the existing Today and schedule workflow.
+pub fn local_today_date(connection: &Connection) -> Result<CivilDate, MeasurementError> {
+    let value: String =
+        connection.query_row("SELECT date('now', 'localtime')", [], |row| row.get(0))?;
+    let mut parts = value.split('-');
+    let year = parts
+        .next()
+        .and_then(|part| part.parse::<i32>().ok())
+        .ok_or(MeasurementError::InvalidStoredConfiguration)?;
+    let month = parts
+        .next()
+        .and_then(|part| part.parse::<u8>().ok())
+        .ok_or(MeasurementError::InvalidStoredConfiguration)?;
+    let day = parts
+        .next()
+        .and_then(|part| part.parse::<u8>().ok())
+        .ok_or(MeasurementError::InvalidStoredConfiguration)?;
+    if parts.next().is_some() {
+        return Err(MeasurementError::InvalidStoredConfiguration);
+    }
+    CivilDate::new(year, month, day).ok_or(MeasurementError::InvalidStoredConfiguration)
+}
+
+/// Return the saved completed/partial value for a measurable habit and date.
+pub fn measurement_for_date(
+    connection: &Connection,
+    habit_id: i64,
+    date: CivilDate,
+) -> Result<Option<MeasurementRecord>, MeasurementError> {
+    let saved: Option<(String, Option<f64>, String)> = connection
+        .query_row(
+            "SELECT status, value, note FROM habit_entries
+             WHERE habit_id = ?1 AND local_date = ?2",
+            params![habit_id, date.to_string()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+
+    let Some((status, actual, note)) = saved else {
+        return Ok(None);
+    };
+    let status = match status.as_str() {
+        "completed" => MeasurementStatus::Completed,
+        "partial" => MeasurementStatus::Partial,
+        "skipped" => return Ok(None),
+        _ => return Err(MeasurementError::InvalidStoredConfiguration),
+    };
+    let actual = actual.ok_or(MeasurementError::InvalidStoredConfiguration)?;
+    if !actual.is_finite() || actual < 0.0 {
+        return Err(MeasurementError::InvalidStoredConfiguration);
+    }
+
+    Ok(Some(MeasurementRecord {
+        status,
+        actual,
+        note,
+    }))
 }
 
 /// Record a measured value for an eligible local calendar date.
