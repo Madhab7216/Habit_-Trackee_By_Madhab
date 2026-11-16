@@ -81,9 +81,23 @@ fn build_ui(application: &Application) {
     subtitle.set_xalign(0.0);
 
     let form = gtk::Box::new(Orientation::Horizontal, 8);
+
+    let habit_field = gtk::Box::new(Orientation::Vertical, 4);
+    let habit_label = Label::new(Some("Habit name"));
+    habit_label.set_xalign(0.0);
     let habit_entry = Entry::new();
     habit_entry.set_placeholder_text(Some("Add a habit…"));
     habit_entry.set_hexpand(true);
+    habit_entry.update_relation(&[gtk::accessible::Relation::LabelledBy(&[
+        habit_label.upcast_ref(),
+    ])]);
+    habit_field.append(&habit_label);
+    habit_field.append(&habit_entry);
+    habit_field.set_hexpand(true);
+
+    let schedule_field = gtk::Box::new(Orientation::Vertical, 4);
+    let schedule_label = Label::new(Some("Schedule"));
+    schedule_label.set_xalign(0.0);
     let schedule_picker = gtk::DropDown::from_strings(&[
         "Every day",
         "Monday to Friday",
@@ -91,15 +105,30 @@ fn build_ui(application: &Application) {
         "Times per week",
     ]);
     schedule_picker.set_selected(0);
+    schedule_picker.update_relation(&[gtk::accessible::Relation::LabelledBy(&[
+        schedule_label.upcast_ref(),
+    ])]);
+    schedule_field.append(&schedule_label);
+    schedule_field.append(&schedule_picker);
+
+    let target_field = gtk::Box::new(Orientation::Vertical, 4);
+    let target_label = Label::new(Some("Weekly target"));
+    target_label.set_xalign(0.0);
     let weekly_target = gtk::SpinButton::with_range(1.0, 7.0, 1.0);
     weekly_target.set_value(3.0);
     weekly_target.set_tooltip_text(Some("Weekly session target (1–7), used for Times per week"));
+    weekly_target.update_relation(&[gtk::accessible::Relation::LabelledBy(&[
+        target_label.upcast_ref(),
+    ])]);
+    target_field.append(&target_label);
+    target_field.append(&weekly_target);
+
     let add_button = Button::with_label("Add habit");
     add_button.add_css_class("suggested-action");
     let archive_view_button = Button::with_label("View archived");
-    form.append(&habit_entry);
-    form.append(&schedule_picker);
-    form.append(&weekly_target);
+    form.append(&habit_field);
+    form.append(&schedule_field);
+    form.append(&target_field);
     form.append(&add_button);
     form.append(&archive_view_button);
 
