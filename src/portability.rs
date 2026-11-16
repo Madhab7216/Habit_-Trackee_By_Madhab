@@ -599,10 +599,11 @@ mod tests {
         assert!(entries.contains("habit_id,local_date,status,value,note"));
         assert!(habits.contains("\"Drink \"\"water\"\", slowly\nand consistently\""));
         assert!(manifest.contains("format_version=1"));
-        assert!(manifest.contains("database_schema_version=2"));
+        assert!(manifest.contains("database_schema_version=3"));
         for filename in [
             "categories.csv",
             "habits.csv",
+            "habit_schedule_revisions.csv",
             "habit_entries.csv",
             "habit_pause_periods.csv",
             "habit_tags.csv",
