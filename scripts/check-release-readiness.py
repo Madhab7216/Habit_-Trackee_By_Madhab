@@ -32,12 +32,14 @@ def _license_evidence(root: Path, package: dict[str, Any]) -> tuple[bool, str]:
     expression = str(package.get("license", "")).strip()
     license_file = str(package.get("license-file", "")).strip()
 
-    if not expression or expression.upper() == "UNLICENSED":
-        return False, "Cargo.toml must contain an owner-selected SPDX license expression; UNLICENSED is not releasable"
-
     if license_file:
         candidate = root / license_file
-        return candidate.is_file(), f"license-file does not exist: {license_file}"
+        if candidate.is_file():
+            return True, ""
+        return False, f"license-file does not exist: {license_file}"
+
+    if not expression or expression.upper() == "UNLICENSED":
+        return False, "Cargo.toml must contain an owner-selected SPDX license expression; UNLICENSED is not releasable"
 
     generic_files = ("LICENSE", "LICENSE.txt", "LICENSE.md", "COPYING")
     if any((root / name).is_file() for name in generic_files):
@@ -141,6 +143,22 @@ def inspect_release(root: Path, candidate_ref: str) -> list[str]:
     for relative in REQUIRED_FILES:
         if not (root / relative).is_file():
             errors.append(f"required release file is missing: {relative}")
+
+    sbom_validator = root / "scripts/validate_sbom.py"
+    if sbom_validator.is_file():
+        validator_text = sbom_validator.read_text(encoding="utf-8")
+        expected_version = re.search(
+            r'^EXPECTED_VERSION\\s*=\\s*["\\\']([^"\\\']+)["\\\']',
+            validator_text,
+            re.MULTILINE,
+        )
+        if expected_version is None:
+            errors.append("SBOM validator must declare EXPECTED_VERSION")
+        elif expected_version.group(1) != package_version:
+            errors.append(
+                "SBOM validator EXPECTED_VERSION does not match Cargo.toml "
+                f"({expected_version.group(1)!r} != {package_version!r})"
+            )
 
     metainfo_path = root / "packaging/org.madhab.habittracker.metainfo.xml"
     if metainfo_path.is_file():
