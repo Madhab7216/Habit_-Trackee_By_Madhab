@@ -1,0 +1,353 @@
+msgid ""
+msgstr "Project-Id-Version: Habit Trackers by Madhab 0.1.0\nLanguage: en\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\nPlural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "The local database could not be opened. See the terminal for details."
+msgstr "The local database could not be opened. See the terminal for details."
+
+msgid "Madhab Habit Tracker"
+msgstr "Madhab Habit Tracker"
+
+msgid "Language"
+msgstr "Language"
+
+msgid "Language saved. Restart the app to apply."
+msgstr "Language saved. Restart the app to apply."
+
+msgid "Could not save language preference: {0}"
+msgstr "Could not save language preference: {0}"
+
+msgid "Today"
+msgstr "Today"
+
+msgid "Small actions, steady progress. Your data stays on this device."
+msgstr "Small actions, steady progress. Your data stays on this device."
+
+msgid "Add a habit…"
+msgstr "Add a habit…"
+
+msgid "Every day"
+msgstr "Every day"
+
+msgid "Monday to Friday"
+msgstr "Monday to Friday"
+
+msgid "Every 2 days"
+msgstr "Every 2 days"
+
+msgid "Times per week"
+msgstr "Times per week"
+
+msgid "Weekly session target (1–7), used for Times per week"
+msgstr "Weekly session target (1–7), used for Times per week"
+
+msgid "Add habit"
+msgstr "Add habit"
+
+msgid "View archived"
+msgstr "View archived"
+
+msgid "Back to today"
+msgstr "Back to today"
+
+msgid "M3 · Reversible habit management · Offline tracking · Your data stays on this device"
+msgstr "M3 · Reversible habit management · Offline tracking · Your data stays on this device"
+
+msgid "Could not load habits: {0}"
+msgstr "Could not load habits: {0}"
+
+msgid "No archived habits."
+msgstr "No archived habits."
+
+msgid "No habits yet. Add one above to begin."
+msgstr "No habits yet. Add one above to begin."
+
+msgid "Archived"
+msgstr "Archived"
+
+msgid "Restore"
+msgstr "Restore"
+
+msgid "Paused"
+msgstr "Paused"
+
+msgid "Completed"
+msgstr "Completed"
+
+msgid "Not scheduled"
+msgstr "Not scheduled"
+
+msgid "Due today"
+msgstr "Due today"
+
+msgid "Edit"
+msgstr "Edit"
+
+msgid "Undo"
+msgstr "Undo"
+
+msgid "Mark done"
+msgstr "Mark done"
+
+msgid "Resume"
+msgstr "Resume"
+
+msgid "Pause"
+msgstr "Pause"
+
+msgid "Archive"
+msgstr "Archive"
+
+msgid "Edit habit"
+msgstr "Edit habit"
+
+msgid "Habit name"
+msgstr "Habit name"
+
+msgid "Cancel"
+msgstr "Cancel"
+
+msgid "Save"
+msgstr "Save"
+
+msgid "Could not save habit: {0}"
+msgstr "Could not save habit: {0}"
+
+msgid "Goals & milestones"
+msgstr "Goals & milestones"
+
+msgid "Turn long-term goals into clear, measurable milestones. Progress is based on completed milestones."
+msgstr "Turn long-term goals into clear, measurable milestones. Progress is based on completed milestones."
+
+msgid "New goal title"
+msgstr "New goal title"
+
+msgid "Target date · YYYY-MM-DD"
+msgstr "Target date · YYYY-MM-DD"
+
+msgid "Add goal"
+msgstr "Add goal"
+
+msgid "Show archived"
+msgstr "Show archived"
+
+msgid "Back to goals"
+msgstr "Back to goals"
+
+msgid "Could not create goal: {0}"
+msgstr "Could not create goal: {0}"
+
+msgid "Could not load goals: {0}"
+msgstr "Could not load goals: {0}"
+
+msgid "No archived goals."
+msgstr "No archived goals."
+
+msgid "No goals yet. Add your first goal above."
+msgstr "No goals yet. Add your first goal above."
+
+msgid "Target {0}"
+msgstr "Target {0}"
+
+msgid "No target date"
+msgstr "No target date"
+
+msgid "{0}% · {1}/{2} milestones · {3} skipped · {4} linked habits"
+msgstr "{0}% · {1}/{2} milestones · {3} skipped · {4} linked habits"
+
+msgid "Milestones"
+msgstr "Milestones"
+
+msgid "Reopen"
+msgstr "Reopen"
+
+msgid "Complete goal"
+msgstr "Complete goal"
+
+msgid "Edit goal"
+msgstr "Edit goal"
+
+msgid "Goal title"
+msgstr "Goal title"
+
+msgid "Short description"
+msgstr "Short description"
+
+msgid "Target date · YYYY-MM-DD (optional)"
+msgstr "Target date · YYYY-MM-DD (optional)"
+
+msgid "Save changes"
+msgstr "Save changes"
+
+msgid "Could not update goal: {0}"
+msgstr "Could not update goal: {0}"
+
+msgid "Milestones · {0}"
+msgstr "Milestones · {0}"
+
+msgid "New milestone"
+msgstr "New milestone"
+
+msgid "Due · YYYY-MM-DD"
+msgstr "Due · YYYY-MM-DD"
+
+msgid "Add"
+msgstr "Add"
+
+msgid "Could not add milestone: {0}"
+msgstr "Could not add milestone: {0}"
+
+msgid "Could not load milestones: {0}"
+msgstr "Could not load milestones: {0}"
+
+msgid "No milestones yet. Add the first step above."
+msgstr "No milestones yet. Add the first step above."
+
+msgid "No due date"
+msgstr "No due date"
+
+msgid "Skipped"
+msgstr "Skipped"
+
+msgid "Complete"
+msgstr "Complete"
+
+msgid "Could not update milestone: {0}"
+msgstr "Could not update milestone: {0}"
+
+msgid "Skip"
+msgstr "Skip"
+
+msgid "goal title must contain between 1 and 120 characters"
+msgstr "goal title must contain between 1 and 120 characters"
+
+msgid "milestone title must contain between 1 and 120 characters"
+msgstr "milestone title must contain between 1 and 120 characters"
+
+msgid "description must be 2,000 characters or fewer"
+msgstr "description must be 2,000 characters or fewer"
+
+msgid "date must be a real calendar date in YYYY-MM-DD format"
+msgstr "date must be a real calendar date in YYYY-MM-DD format"
+
+msgid "unsupported goal status"
+msgstr "unsupported goal status"
+
+msgid "habit name must contain between 1 and 120 characters"
+msgstr "habit name must contain between 1 and 120 characters"
+
+msgid "Link habits"
+msgstr "Link habits"
+
+msgid "Select the habits that support this goal. Linking habits does not automatically change milestone progress."
+msgstr "Select the habits that support this goal. Linking habits does not automatically change milestone progress."
+
+msgid "{0} linked · {1} available"
+msgstr "{0} linked · {1} available"
+
+msgid "Save links"
+msgstr "Save links"
+
+msgid "Could not save habit links: {0}"
+msgstr "Could not save habit links: {0}"
+
+msgid "No unarchived habits are available yet. Create a habit in Today, then return here."
+msgstr "No unarchived habits are available yet. Create a habit in Today, then return here."
+
+msgid "Habit Trackers by Madhab"
+msgstr "Habit Trackers by Madhab"
+
+msgid "Could not load review: {0}"
+msgstr "Could not load review: {0}"
+
+msgid "Saved review loaded from this device."
+msgstr "Saved review loaded from this device."
+
+msgid "No review saved for this period yet."
+msgstr "No review saved for this period yet."
+
+msgid "Saved records only · {0} completed · {1} partial · {2} skipped. This is not an adherence score."
+msgstr "Saved records only · {0} completed · {1} partial · {2} skipped. This is not an adherence score."
+
+msgid "Activity summary unavailable: {0}"
+msgstr "Activity summary unavailable: {0}"
+
+msgid "Weekly & Monthly Reviews"
+msgstr "Weekly & Monthly Reviews"
+
+msgid "Reflect and plan"
+msgstr "Reflect and plan"
+
+msgid "Private reflections stored on this device. Choose a Monday for a weekly review or the first day of a month for a monthly review."
+msgstr "Private reflections stored on this device. Choose a Monday for a weekly review or the first day of a month for a monthly review."
+
+msgid "Weekly · Monday to Sunday"
+msgstr "Weekly · Monday to Sunday"
+
+msgid "Monthly"
+msgstr "Monthly"
+
+msgid "Week: Monday start date. Month: first calendar day."
+msgstr "Week: Monday start date. Month: first calendar day."
+
+msgid "Current period"
+msgstr "Current period"
+
+msgid "Load"
+msgstr "Load"
+
+msgid "Activity summary will appear here."
+msgstr "Activity summary will appear here."
+
+msgid "What went well?"
+msgstr "What went well?"
+
+msgid "Record helpful routines, completed actions, or progress you want to remember."
+msgstr "Record helpful routines, completed actions, or progress you want to remember."
+
+msgid "What was difficult?"
+msgstr "What was difficult?"
+
+msgid "Note obstacles or friction without treating a missed action as a personal failure."
+msgstr "Note obstacles or friction without treating a missed action as a personal failure."
+
+msgid "What did I learn?"
+msgstr "What did I learn?"
+
+msgid "Capture what worked, what did not, and one adjustment worth testing."
+msgstr "Capture what worked, what did not, and one adjustment worth testing."
+
+msgid "What will I focus on next?"
+msgstr "What will I focus on next?"
+
+msgid "Write a small, actionable focus for the next week or month."
+msgstr "Write a small, actionable focus for the next week or month."
+
+msgid "Save review"
+msgstr "Save review"
+
+msgid "Could not find current period: {0}"
+msgstr "Could not find current period: {0}"
+
+msgid "Review saved locally."
+msgstr "Review saved locally."
+
+msgid "Could not save review: {0}"
+msgstr "Could not save review: {0}"
+
+msgid "Could not initialize review window: {0}"
+msgstr "Could not initialize review window: {0}"
+
+msgid "Weekly & monthly reviews"
+msgstr "Weekly & monthly reviews"
+
+msgid "review note must be 8,000 characters or fewer"
+msgstr "review note must be 8,000 characters or fewer"
+
+msgid "review period must be week or month"
+msgstr "review period must be week or month"
+
+msgid "period start must be a real YYYY-MM-DD date"
+msgstr "period start must be a real YYYY-MM-DD date"
+
+msgid "weekly reviews must start on Monday; monthly reviews must start on day 01"
+msgstr "weekly reviews must start on Monday; monthly reviews must start on day 01"

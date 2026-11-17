@@ -2,9 +2,9 @@ name: Data portability checks
 
 on:
   push:
-    branches: ["work/linux-mint-habit-tracker-foundation", "work/m6-data-portability-current"]
+    branches: ["work/linux-mint-habit-tracker-foundation", "work/m6-data-portability-current", "work/m5-period-reviews-i18n"]
   pull_request:
-    branches: ["main", "work/linux-mint-habit-tracker-foundation"]
+    branches: ["main", "work/linux-mint-habit-tracker-foundation", "work/m5-period-reviews"]
   workflow_dispatch:
 
 permissions:
