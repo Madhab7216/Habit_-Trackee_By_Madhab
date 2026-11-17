@@ -25,7 +25,7 @@ A passing AT-SPI snapshot is not a full accessibility certification. It does not
 - Bengali font shaping, translation completeness or visual layout;
 - every dialog and every screen added by separate feature branches.
 
-The Today form uses GTK labels with explicit mnemonic targets. GTK automatically updates the target control's `LabelledBy` accessibility relation when a label is associated with its mnemonic widget. The labels also provide keyboard accelerators (Alt+H, Alt+S and Alt+W). CI uses XTEST keyboard input through `xdotool` and verifies the AT-SPI `FOCUSED` state reaches the corresponding labelled control after each mnemonic. The same label association is applied in the Edit habit dialog. This focused check does not replace checking sequential navigation, announcement order or pronunciation with Orca.
+The Today form uses GTK labels with explicit mnemonic targets. GTK automatically updates the target control's `LabelledBy` accessibility relation when a label is associated with its mnemonic widget. The labels also provide keyboard accelerators (Alt+H, Alt+S and Alt+W). CI uses XTEST keyboard input through `xdotool` and verifies the AT-SPI `FOCUSED` state after each mnemonic. Alt+H and Alt+W must focus their named controls; Alt+S opens the GTK dropdown and may expose focus on its option as an unnamed `list item` in AT-SPI. Because the smoke test uses an isolated empty database, that focused list item belongs to the Schedule dropdown. The same label association is applied in the Edit habit dialog. This focused check does not replace checking sequential navigation, announcement order or pronunciation with Orca.
 
 Those behaviours still need manual validation on the target Linux Mint workstation.
 
