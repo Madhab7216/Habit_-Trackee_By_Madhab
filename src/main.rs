@@ -6,8 +6,8 @@ pub mod timezone;
 
 use crate::domain::Cadence;
 use crate::schedule_history::{
-    NewScheduleRevision, PastEditConfirmation, Recurrence, TimeZoneStatus,
-    append_revision, revisions_for_habit,
+    NewScheduleRevision, PastEditConfirmation, Recurrence, TimeZoneStatus, append_revision,
+    revisions_for_habit,
 };
 use crate::timezone::IanaTimeZone;
 use gtk::prelude::*;
@@ -398,11 +398,13 @@ fn show_schedule_window(
             .max();
         base_date
             .and_then(|date| {
-                state.connection.borrow().query_row(
-                    "SELECT date(?1, '+1 day')",
-                    [date.to_string()],
-                    |row| row.get::<_, String>(0),
-                ).ok()
+                state
+                    .connection
+                    .borrow()
+                    .query_row("SELECT date(?1, '+1 day')", [date.to_string()], |row| {
+                        row.get::<_, String>(0)
+                    })
+                    .ok()
             })
             .unwrap_or_default()
     };
