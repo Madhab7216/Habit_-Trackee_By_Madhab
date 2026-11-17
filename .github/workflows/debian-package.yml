@@ -69,16 +69,22 @@ jobs:
           bash -n scripts/build-deb.sh
           bash -n tests/test-deb-package.sh
 
-      - name: Build Debian package
-        run: scripts/build-deb.sh
-
-      - name: Verify Debian package contents
-        run: tests/test-deb-package.sh "target/packages/madhab-habit-tracker_0.1.0_amd64.deb"
-
-      - name: Build a higher-version package for upgrade testing
+      - name: Build and inspect base and upgrade packages
         run: |
-          PACKAGE_VERSION="0.1.0+ci1" BUILD_BINARY=0 scripts/build-deb.sh
-          tests/test-deb-package.sh "target/packages/madhab-habit-tracker_0.1.0+ci1_amd64.deb"
+          set -euo pipefail
+          base_version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          base_package="target/packages/madhab-habit-tracker_${base_version}_amd64.deb"
+          upgrade_version="${base_version}+ci1"
+          upgrade_package="target/packages/madhab-habit-tracker_${upgrade_version}_amd64.deb"
+
+          scripts/build-deb.sh
+          tests/test-deb-package.sh "$base_package"
+          PACKAGE_VERSION="$upgrade_version" BUILD_BINARY=0 scripts/build-deb.sh
+          tests/test-deb-package.sh "$upgrade_package"
+          echo "BASE_PACKAGE=$base_package" >> "$GITHUB_ENV"
+          echo "UPGRADE_PACKAGE=$upgrade_package" >> "$GITHUB_ENV"
+          echo "BASE_VERSION=$base_version" >> "$GITHUB_ENV"
+          echo "UPGRADE_VERSION=$upgrade_version" >> "$GITHUB_ENV"
 
       - name: Install, upgrade and remove while preserving user data
         run: |
@@ -89,15 +95,15 @@ jobs:
           mkdir -p "$data_dir"
           printf 'keep-local-data-on-package-removal\n' > "$data_dir/habit-tracker.sqlite3"
 
-          sudo dpkg --install "target/packages/madhab-habit-tracker_0.1.0_amd64.deb"
+          sudo dpkg --install $BASE_PACKAGE
           installed_version="$(dpkg-query -W --showformat='${Version}' madhab-habit-tracker)"
-          test "$installed_version" = "0.1.0"
+          test "$installed_version" = "$BASE_VERSION"
           test -x /usr/bin/madhab-habit-tracker
           test -x /usr/bin/madhab-data-tool
 
-          sudo dpkg --install "target/packages/madhab-habit-tracker_0.1.0+ci1_amd64.deb"
+          sudo dpkg --install $UPGRADE_PACKAGE
           upgraded_version="$(dpkg-query -W --showformat='${Version}' madhab-habit-tracker)"
-          test "$upgraded_version" = "0.1.0+ci1"
+          test "$upgraded_version" = "$UPGRADE_VERSION"
 
           sudo dpkg --purge madhab-habit-tracker
           test ! -e /usr/bin/madhab-habit-tracker
