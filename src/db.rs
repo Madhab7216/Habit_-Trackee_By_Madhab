@@ -277,12 +277,8 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
     let rows = statement.query_map([date.to_string()], |row| {
         let schedule_type: Option<String> = row.get(2)?;
         let scheduled = if let Some(schedule_type) = schedule_type {
-            let cadence = cadence_from_values(
-                &schedule_type,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-            )?;
+            let cadence =
+                cadence_from_values(&schedule_type, row.get(3)?, row.get(4)?, row.get(5)?)?;
             let start_date_text: Option<String> = row.get(6)?;
             let start_date = start_date_text
                 .as_deref()
@@ -756,8 +752,14 @@ mod tests {
         start: CivilDate,
         end: Option<CivilDate>,
     ) -> i64 {
-        let (tracking_type, schedule_type, weekday_mask, interval_days, target_per_period, period_unit) =
-            match cadence {
+        let (
+            tracking_type,
+            schedule_type,
+            weekday_mask,
+            interval_days,
+            target_per_period,
+            period_unit,
+        ) = match cadence {
                 Cadence::Daily => ("binary", "daily", None, None, None, "day"),
                 Cadence::Weekdays { weekday_mask } => (
                     "binary",
