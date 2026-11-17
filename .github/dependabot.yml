@@ -1,0 +1,47 @@
+version: 2
+updates:
+  # The application currently lives on the foundation feature branch while
+  # main is still the README-only bootstrap. target-branch keeps maintenance
+  # useful during this staged development period. Dependabot security updates
+  # are default-branch-only; see docs/SECURITY_AUTOMATION.md.
+  - package-ecosystem: cargo
+    directory: /
+    target-branch: work/linux-mint-habit-tracker-foundation
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      rust-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps(cargo)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: work/linux-mint-habit-tracker-foundation
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:20"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      action-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "ci(actions)"
