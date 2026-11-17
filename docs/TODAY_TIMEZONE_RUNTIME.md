@@ -16,6 +16,10 @@ This change connects the Today/check-in path to the timezone stored on each curr
 - Resolve completion state, pause state, check-in writes, pause starts and resume boundaries using that same per-habit civil date.
 - The Today row exposes the resolved civil date and canonical zone in its tooltip so dates such as tomorrow in Kolkata are not silently presented as the machine's date.
 
+## New habit defaults
+
+When a new habit is created, the application resolves the operating system's current zone to a canonical IANA identifier and stores it as a `validated_iana` baseline revision in the same SQLite transaction as the habit. Its initial `start_date` is computed in that zone. Changing the operating-system timezone later does not silently change that habit's zone; the user must append a new schedule revision in the Schedule editor.
+
 ## Legacy schedule behavior
 
 Existing revisions tagged `legacy_unverified` retain their original timezone text. The app does not guess or rewrite their historical zone. At runtime, a legacy-unverified revision uses the current system IANA zone as a compatibility fallback. It remains marked legacy-unverified in SQLite until the user saves a new schedule revision with a validated IANA zone.
