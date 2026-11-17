@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("RELEASE CANDIDATE: PREFLIGHT PASSED")
     print(f"Package manifest, lockfile, license, security policy and release metadata are present for {args.ref}.")
-    print("The locked build, test, Clippy, packaging and SBOM jobs must still pass.")
+    print("The locked build, test, Clippy, packaging, SBOM and signed-attestation verification jobs must still pass.")
     return 0
 
 
