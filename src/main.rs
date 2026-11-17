@@ -81,9 +81,23 @@ fn build_ui(application: &Application) {
     subtitle.set_xalign(0.0);
 
     let form = gtk::Box::new(Orientation::Horizontal, 8);
+
+    let habit_field = gtk::Box::new(Orientation::Vertical, 4);
+    let habit_label = Label::new(Some("_Habit name"));
+    habit_label.set_use_underline(true);
+    habit_label.set_xalign(0.0);
     let habit_entry = Entry::new();
     habit_entry.set_placeholder_text(Some("Add a habit…"));
     habit_entry.set_hexpand(true);
+    habit_label.set_mnemonic_widget(Some(&habit_entry));
+    habit_field.append(&habit_label);
+    habit_field.append(&habit_entry);
+    habit_field.set_hexpand(true);
+
+    let schedule_field = gtk::Box::new(Orientation::Vertical, 4);
+    let schedule_label = Label::new(Some("_Schedule"));
+    schedule_label.set_use_underline(true);
+    schedule_label.set_xalign(0.0);
     let schedule_picker = gtk::DropDown::from_strings(&[
         "Every day",
         "Monday to Friday",
@@ -91,15 +105,27 @@ fn build_ui(application: &Application) {
         "Times per week",
     ]);
     schedule_picker.set_selected(0);
+    schedule_label.set_mnemonic_widget(Some(&schedule_picker));
+    schedule_field.append(&schedule_label);
+    schedule_field.append(&schedule_picker);
+
+    let target_field = gtk::Box::new(Orientation::Vertical, 4);
+    let target_label = Label::new(Some("_Weekly target"));
+    target_label.set_use_underline(true);
+    target_label.set_xalign(0.0);
     let weekly_target = gtk::SpinButton::with_range(1.0, 7.0, 1.0);
     weekly_target.set_value(3.0);
     weekly_target.set_tooltip_text(Some("Weekly session target (1–7), used for Times per week"));
+    target_label.set_mnemonic_widget(Some(&weekly_target));
+    target_field.append(&target_label);
+    target_field.append(&weekly_target);
+
     let add_button = Button::with_label("Add habit");
     add_button.add_css_class("suggested-action");
     let archive_view_button = Button::with_label("View archived");
-    form.append(&habit_entry);
-    form.append(&schedule_picker);
-    form.append(&weekly_target);
+    form.append(&habit_field);
+    form.append(&schedule_field);
+    form.append(&target_field);
     form.append(&add_button);
     form.append(&archive_view_button);
 
@@ -354,9 +380,11 @@ fn show_edit_window(
     content.set_margin_start(20);
     content.set_margin_end(20);
 
-    let label = Label::new(Some("Habit name"));
+    let label = Label::new(Some("_Habit name"));
+    label.set_use_underline(true);
     label.set_xalign(0.0);
     let entry = Entry::new();
+    label.set_mnemonic_widget(Some(&entry));
     entry.set_text(current_name);
     entry.set_activates_default(true);
     let feedback = Label::new(None);
