@@ -661,7 +661,7 @@ fn show_schedule_window(
             effective_from,
             end_date,
             recurrence,
-            time_zone_id,
+            time_zone_id: timezone_id,
             change_reason: save_reason.text().to_string(),
         };
 
