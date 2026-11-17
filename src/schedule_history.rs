@@ -421,8 +421,8 @@ pub fn ensure_habit_baseline_with_timezone(
     habit_id: i64,
     time_zone_id: &str,
 ) -> Result<(), ScheduleHistoryError> {
-    let zone = IanaTimeZone::parse(time_zone_id)
-        .map_err(|_| ScheduleHistoryError::InvalidTimeZone)?;
+    let zone =
+        IanaTimeZone::parse(time_zone_id).map_err(|_| ScheduleHistoryError::InvalidTimeZone)?;
     connection.execute(
         "INSERT INTO habit_schedule_revisions (
             habit_id, revision_no, effective_from, end_date, schedule_type,
