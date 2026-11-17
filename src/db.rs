@@ -1,4 +1,7 @@
 use crate::domain::{Cadence, CivilDate, HabitSchedule};
+use crate::schedule_history::{Recurrence, TimeZoneStatus};
+use crate::timezone::IanaTimeZone;
+use jiff::Timestamp;
 use rusqlite::{Connection, Result, params};
 use std::{env, fs, path::PathBuf};
 
@@ -12,8 +15,13 @@ pub struct TodayHabit {
     pub name: String,
     pub completed: bool,
     pub paused: bool,
-    /// False means the habit is intentionally not due on the requested local date.
+    /// False means the habit is intentionally not due on this habit's local date.
     pub scheduled: bool,
+    /// The civil date used for this habit, which may differ between time zones.
+    pub local_date: Option<CivilDate>,
+    /// The canonical time zone used to resolve local_date. Legacy records use the
+    /// current system IANA zone until the user saves a verified revision.
+    pub time_zone_id: Option<String>,
 }
 
 pub fn open() -> Result<Connection> {
@@ -224,14 +232,65 @@ pub fn archived_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
             completed: row.get::<_, i64>(2)? != 0,
             paused: row.get::<_, i64>(3)? != 0,
             scheduled: false,
+            local_date: None,
+            time_zone_id: None,
         })
     })?;
     rows.collect()
 }
 
-/// Read the machine-local date once and use it consistently for every row in Today.
+/// Resolve every habit's local date from the IANA zone on its currently effective
+/// schedule revision. A legacy-unverified revision deliberately falls back to the
+/// current system IANA zone; historical dates are never rewritten.
 pub fn today_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
-    habits_for_date(connection, local_today(connection)?)
+    today_habits_at(connection, Timestamp::now())
+}
+
+/// Deterministic Today view for a supplied instant. Habits in different zones may
+/// legitimately display different civil dates at the same absolute instant.
+pub fn today_habits_at(connection: &Connection, instant: Timestamp) -> Result<Vec<TodayHabit>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name FROM habits
+         WHERE archived_at IS NULL
+         ORDER BY sort_order, id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let active_habits = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+    active_habits
+        .into_iter()
+        .map(|(habit_id, name)| {
+            let today = resolve_habit_today(connection, habit_id, instant)?;
+            let date_text = today.local_date.to_string();
+            let (completed, paused): (bool, bool) = connection.query_row(
+                "SELECT
+                    EXISTS (
+                        SELECT 1 FROM habit_entries
+                        WHERE habit_id = ?1 AND local_date = ?2 AND status = 'completed'
+                    ),
+                    EXISTS (
+                        SELECT 1 FROM habit_pause_periods
+                        WHERE habit_id = ?1
+                          AND starts_on <= ?2
+                          AND (ends_on IS NULL OR ?2 < ends_on)
+                    )",
+                params![habit_id, date_text],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+
+            Ok(TodayHabit {
+                id: habit_id,
+                name,
+                completed,
+                paused,
+                scheduled: today.scheduled,
+                local_date: Some(today.local_date),
+                time_zone_id: Some(today.time_zone_id),
+            })
+        })
+        .collect()
 }
 
 /// Deterministic schedule evaluation for a supplied civil date. This is reusable by
@@ -303,9 +362,104 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
             completed: row.get::<_, i64>(8)? != 0,
             paused: row.get::<_, i64>(9)? != 0,
             scheduled,
+            local_date: Some(date),
+            time_zone_id: None,
         })
     })?;
     rows.collect()
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedHabitToday {
+    local_date: CivilDate,
+    scheduled: bool,
+    time_zone_id: String,
+}
+
+fn resolve_habit_today(
+    connection: &Connection,
+    habit_id: i64,
+    instant: Timestamp,
+) -> Result<ResolvedHabitToday> {
+    let revisions = crate::schedule_history::revisions_for_habit_readonly(connection, habit_id)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    if revisions.is_empty() {
+        return Err(invalid_schedule_field("missing schedule history"));
+    }
+
+    let mut latest_future: Option<(String, CivilDate)> = None;
+    for revision in revisions.iter().rev() {
+        let zone = match revision.time_zone_status {
+            TimeZoneStatus::ValidatedIana => IanaTimeZone::parse(&revision.time_zone_id)
+                .map_err(|error| invalid_schedule_field(&format!("time_zone_id: {error}")))?,
+            TimeZoneStatus::LegacyUnverified => IanaTimeZone::system()
+                .map_err(|error| invalid_schedule_field(&format!("system time zone: {error}")))?,
+        };
+        let local_date = parse_civil_date(&zone.local_date_at(instant).to_string())
+            .ok_or_else(|| invalid_schedule_field("time-zone local date"))?;
+        let effective_from = parse_civil_date(&revision.effective_from.to_string())
+            .ok_or_else(|| invalid_schedule_field("effective_from"))?;
+
+        // A future revision is interpreted in its own IANA zone. Until that zone's
+        // effective civil date arrives, the previous revision remains in force.
+        if local_date < effective_from {
+            if latest_future.is_none() {
+                latest_future = Some((zone.id().to_owned(), local_date));
+            }
+            continue;
+        }
+
+        // Once a revision has become effective, it supersedes older revisions
+        // permanently. If its own end date has passed, do not resurrect an older rule.
+        let before_or_on_end = revision.end_date.is_none_or(|end| {
+            local_date.to_string() <= end.to_string()
+        });
+        let scheduled = if before_or_on_end {
+            let cadence = cadence_from_revision(&revision.recurrence);
+            let end = revision
+                .end_date
+                .map(|value| {
+                    parse_civil_date(&value.to_string())
+                        .ok_or_else(|| invalid_schedule_field("end_date"))
+                })
+                .transpose()?;
+            HabitSchedule::new(cadence, effective_from, end)
+                .map_err(|_| invalid_schedule_field("schedule bounds"))?
+                .period_for(local_date)
+                .is_some()
+        } else {
+            false
+        };
+
+        return Ok(ResolvedHabitToday {
+            local_date,
+            scheduled,
+            time_zone_id: zone.id().to_owned(),
+        });
+    }
+
+    let (time_zone_id, local_date) = latest_future
+        .ok_or_else(|| invalid_schedule_field("no effective schedule revision"))?;
+    Ok(ResolvedHabitToday {
+        local_date,
+        scheduled: false,
+        time_zone_id,
+    })
+}
+
+fn cadence_from_revision(recurrence: &Recurrence) -> Cadence {
+    match recurrence {
+        Recurrence::Daily => Cadence::Daily,
+        Recurrence::Weekdays { weekday_mask } => Cadence::Weekdays {
+            weekday_mask: *weekday_mask,
+        },
+        Recurrence::EveryNDays { interval_days } => Cadence::EveryNDays {
+            interval: *interval_days,
+        },
+        Recurrence::TimesPerWeek { target_per_week } => Cadence::TimesPerWeek {
+            target: *target_per_week,
+        },
+    }
 }
 
 fn local_today(connection: &Connection) -> Result<CivilDate> {
@@ -361,9 +515,20 @@ fn invalid_schedule_field(field: &str) -> rusqlite::Error {
     ))
 }
 
-/// Pause is effective from the current local date. A resume date is exclusive:
-/// resuming today makes the habit active again today, without deleting pause history.
+/// Pause/resume is effective on the habit's own current civil date.
 pub fn set_paused(connection: &Connection, habit_id: i64, paused: bool) -> Result<()> {
+    set_paused_at(connection, habit_id, paused, Timestamp::now())
+}
+
+/// Deterministic pause/resume API. The date is resolved in the currently effective
+/// schedule's IANA zone, not the machine's local zone.
+pub fn set_paused_at(
+    connection: &Connection,
+    habit_id: i64,
+    paused: bool,
+    instant: Timestamp,
+) -> Result<()> {
+    let today = resolve_habit_today(connection, habit_id, instant)?;
     let exists: bool = connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL)",
         [habit_id],
@@ -373,29 +538,87 @@ pub fn set_paused(connection: &Connection, habit_id: i64, paused: bool) -> Resul
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
+    let date_text = today.local_date.to_string();
     if paused {
         connection.execute(
             "INSERT INTO habit_pause_periods(habit_id, starts_on)
-             SELECT ?1, date('now', 'localtime')
+             SELECT ?1, ?2
              WHERE NOT EXISTS (
                  SELECT 1 FROM habit_pause_periods
                  WHERE habit_id = ?1 AND ends_on IS NULL
              )",
-            [habit_id],
+            params![habit_id, date_text],
         )?;
     } else {
         connection.execute(
             "UPDATE habit_pause_periods
-             SET ends_on = date('now', 'localtime')
+             SET ends_on = ?2
              WHERE habit_id = ?1 AND ends_on IS NULL",
-            [habit_id],
+            params![habit_id, date_text],
         )?;
     }
     Ok(())
 }
 
 pub fn set_today_completed(connection: &Connection, habit_id: i64, completed: bool) -> Result<()> {
-    set_completed_for_date(connection, habit_id, completed, local_today(connection)?)
+    set_today_completed_at(connection, habit_id, completed, Timestamp::now())
+}
+
+/// Persist a Today check-in using the current civil date in this habit's active
+/// IANA time zone. Schedule, pause and entry lookup all use exactly the same date.
+pub fn set_today_completed_at(
+    connection: &Connection,
+    habit_id: i64,
+    completed: bool,
+    instant: Timestamp,
+) -> Result<()> {
+    let today = resolve_habit_today(connection, habit_id, instant)?;
+    let active: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL)",
+        [habit_id],
+        |row| row.get(0),
+    )?;
+    if !active {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+
+    let date_text = today.local_date.to_string();
+    if completed {
+        let paused: bool = connection.query_row(
+            "SELECT EXISTS (
+                SELECT 1 FROM habit_pause_periods
+                WHERE habit_id = ?1
+                  AND starts_on <= ?2
+                  AND (ends_on IS NULL OR ?2 < ends_on)
+            )",
+            params![habit_id, date_text],
+            |row| row.get(0),
+        )?;
+        if paused {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "a paused habit cannot be checked in".to_string(),
+            ));
+        }
+        if !today.scheduled {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "a habit cannot be checked in on an unscheduled local date".to_string(),
+            ));
+        }
+        connection.execute(
+            "INSERT INTO habit_entries(habit_id, local_date, status, value)
+             VALUES (?1, ?2, 'completed', 1.0)
+             ON CONFLICT(habit_id, local_date) DO UPDATE SET
+                status = 'completed', value = 1.0, updated_at = CURRENT_TIMESTAMP",
+            params![habit_id, date_text],
+        )?;
+    } else {
+        connection.execute(
+            "DELETE FROM habit_entries
+             WHERE habit_id = ?1 AND local_date = ?2 AND status = 'completed'",
+            params![habit_id, date_text],
+        )?;
+    }
+    Ok(())
 }
 
 /// Persist a check-in only when the active habit is due and not paused for that date.
