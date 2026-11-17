@@ -5,11 +5,17 @@ pub mod schedule_history;
 pub mod timezone;
 
 use crate::domain::Cadence;
+use crate::schedule_history::{
+    NewScheduleRevision, PastEditConfirmation, Recurrence, TimeZoneStatus, append_revision,
+    revisions_for_habit,
+};
+use crate::timezone::IanaTimeZone;
 use gtk::prelude::*;
 use gtk::{
-    Application, ApplicationWindow, Button, Entry, HeaderBar, Label, ListBox, ListBoxRow,
-    Orientation, ScrolledWindow,
+    Application, ApplicationWindow, Button, CheckButton, ComboBoxText, Entry, HeaderBar, Label,
+    ListBox, ListBoxRow, Orientation, ScrolledWindow,
 };
+use jiff::{Timestamp, civil::Date};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -277,6 +283,22 @@ fn refresh_list(
                 );
             });
 
+            let schedule_button = Button::with_label("Schedule");
+            let schedule_state = Rc::clone(state);
+            let schedule_list = list.clone();
+            let schedule_parent = parent.clone();
+            let schedule_habit_id = habit.id;
+            let schedule_habit_name = habit.name.clone();
+            schedule_button.connect_clicked(move |_| {
+                show_schedule_window(
+                    &schedule_parent,
+                    &schedule_list,
+                    &schedule_state,
+                    schedule_habit_id,
+                    &schedule_habit_name,
+                );
+            });
+
             let action = Button::with_label(if habit.completed { "Undo" } else { "Mark done" });
             action.set_sensitive(habit.completed || (!habit.paused && habit.scheduled));
             let action_state = Rc::clone(state);
@@ -324,6 +346,7 @@ fn refresh_list(
 
             row_content.append(&status);
             row_content.append(&edit_button);
+            row_content.append(&schedule_button);
             row_content.append(&action);
             row_content.append(&pause_action);
             row_content.append(&archive_action);
@@ -333,6 +356,340 @@ fn refresh_list(
         row.set_child(Some(&row_content));
         list.append(&row);
     }
+}
+
+fn show_schedule_window(
+    parent: &ApplicationWindow,
+    list: &ListBox,
+    state: &Rc<AppState>,
+    habit_id: i64,
+    habit_name: &str,
+) {
+    let revisions = {
+        let mut connection = state.connection.borrow_mut();
+        revisions_for_habit(&mut connection, habit_id)
+    };
+    let latest = match revisions {
+        Ok(items) => items.last().cloned(),
+        Err(error) => {
+            eprintln!("Could not read schedule history: {error}");
+            None
+        }
+    };
+
+    let system_zone = IanaTimeZone::system().ok();
+    let default_zone = latest
+        .as_ref()
+        .filter(|revision| revision.time_zone_status == TimeZoneStatus::ValidatedIana)
+        .map(|revision| revision.time_zone_id.clone())
+        .or_else(|| system_zone.as_ref().map(|zone| zone.id().to_owned()))
+        .unwrap_or_default();
+    let selected_zone = IanaTimeZone::parse(&default_zone).ok();
+    let today_in_zone = selected_zone
+        .as_ref()
+        .map(|zone| zone.local_date_at(Timestamp::now()));
+
+    let default_effective_date = {
+        let base_date = latest
+            .as_ref()
+            .map(|revision| revision.end_date.unwrap_or(revision.effective_from))
+            .into_iter()
+            .chain(today_in_zone)
+            .max();
+        base_date
+            .and_then(|date| {
+                state
+                    .connection
+                    .borrow()
+                    .query_row("SELECT date(?1, '+1 day')", [date.to_string()], |row| {
+                        row.get::<_, String>(0)
+                    })
+                    .ok()
+            })
+            .unwrap_or_default()
+    };
+
+    let editor = gtk::Window::builder()
+        .title(format!("Change schedule — {habit_name}"))
+        .transient_for(parent)
+        .modal(true)
+        .default_width(520)
+        .default_height(680)
+        .build();
+
+    let content = gtk::Box::new(Orientation::Vertical, 10);
+    content.set_margin_top(18);
+    content.set_margin_bottom(18);
+    content.set_margin_start(20);
+    content.set_margin_end(20);
+
+    let current_label = Label::new(Some(
+        &latest
+            .as_ref()
+            .map(|revision| {
+                format!(
+                    "Latest saved rule: {:?}, from {}, timezone {} ({:?})",
+                    revision.recurrence,
+                    revision.effective_from,
+                    revision.time_zone_id,
+                    revision.time_zone_status
+                )
+            })
+            .unwrap_or_else(|| "No schedule revision found.".to_owned()),
+    ));
+    current_label.set_xalign(0.0);
+    current_label.set_wrap(true);
+
+    let intro = Label::new(Some(
+        "A saved schedule is immutable. New rules start on the selected date; earlier check-ins are retained.",
+    ));
+    intro.set_xalign(0.0);
+    intro.set_wrap(true);
+    intro.add_css_class("dim-label");
+
+    let effective_label = Label::new(Some("Effective from (YYYY-MM-DD)"));
+    effective_label.set_xalign(0.0);
+    let effective_entry = Entry::new();
+    effective_entry.set_placeholder_text(Some("2026-11-18"));
+    effective_entry.set_text(&default_effective_date);
+
+    let cadence_label = Label::new(Some("Recurrence"));
+    cadence_label.set_xalign(0.0);
+    let cadence_combo = ComboBoxText::new();
+    cadence_combo.append(Some("daily"), "Daily");
+    cadence_combo.append(Some("weekdays"), "Selected weekdays");
+    cadence_combo.append(Some("every_n_days"), "Every N days");
+    cadence_combo.append(Some("times_per_week"), "N times per week");
+
+    let current_recurrence = latest
+        .as_ref()
+        .map(|revision| revision.recurrence)
+        .unwrap_or(Recurrence::Daily);
+    let initial_cadence_id = match current_recurrence {
+        Recurrence::Daily => "daily",
+        Recurrence::Weekdays { .. } => "weekdays",
+        Recurrence::EveryNDays { .. } => "every_n_days",
+        Recurrence::TimesPerWeek { .. } => "times_per_week",
+    };
+    cadence_combo.set_active_id(Some(initial_cadence_id));
+
+    let weekday_label = Label::new(Some("Weekdays (Monday to Sunday)"));
+    weekday_label.set_xalign(0.0);
+    let weekday_row = gtk::Box::new(Orientation::Horizontal, 6);
+    let weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    let initial_mask = match current_recurrence {
+        Recurrence::Weekdays { weekday_mask } => weekday_mask,
+        _ => 0b001_1111,
+    };
+    let weekday_checks: Vec<CheckButton> = weekday_names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| {
+            let check = CheckButton::with_label(name);
+            check.set_active(initial_mask & (1 << index) != 0);
+            weekday_row.append(&check);
+            check
+        })
+        .collect();
+
+    let interval_label = Label::new(Some("Every N days"));
+    interval_label.set_xalign(0.0);
+    let interval_entry = Entry::new();
+    interval_entry.set_placeholder_text(Some("2"));
+    let interval = match current_recurrence {
+        Recurrence::EveryNDays { interval_days } => interval_days.to_string(),
+        _ => "2".to_owned(),
+    };
+    interval_entry.set_text(&interval);
+
+    let weekly_label = Label::new(Some("Weekly session target (1–7)"));
+    weekly_label.set_xalign(0.0);
+    let weekly_entry = Entry::new();
+    weekly_entry.set_placeholder_text(Some("3"));
+    let weekly_target = match current_recurrence {
+        Recurrence::TimesPerWeek { target_per_week } => target_per_week.to_string(),
+        _ => "3".to_owned(),
+    };
+    weekly_entry.set_text(&weekly_target);
+
+    let end_label = Label::new(Some("End date (optional, inclusive)"));
+    end_label.set_xalign(0.0);
+    let end_entry = Entry::new();
+    end_entry.set_placeholder_text(Some("Leave blank for no end date"));
+    let timezone_label = Label::new(Some("IANA time zone"));
+    timezone_label.set_xalign(0.0);
+    let timezone_entry = Entry::new();
+    timezone_entry.set_placeholder_text(Some("e.g. Asia/Kolkata"));
+    timezone_entry.set_text(&default_zone);
+
+    let reason_label = Label::new(Some("Reason for this change"));
+    reason_label.set_xalign(0.0);
+    let reason_entry = Entry::new();
+    reason_entry.set_placeholder_text(Some("Why are you changing the schedule?"));
+
+    let historical_confirmation = CheckButton::with_label(
+        "I understand: a past-effective rule changes historical due-state interpretation; saved check-ins are not deleted.",
+    );
+    historical_confirmation.set_active(false);
+
+    let feedback = Label::new(None);
+    feedback.set_xalign(0.0);
+    feedback.set_wrap(true);
+    feedback.add_css_class("error");
+
+    let actions = gtk::Box::new(Orientation::Horizontal, 8);
+    actions.set_halign(gtk::Align::End);
+    let cancel_button = Button::with_label("Cancel");
+    let save_button = Button::with_label("Save new schedule");
+    save_button.add_css_class("suggested-action");
+    actions.append(&cancel_button);
+    actions.append(&save_button);
+
+    content.append(&current_label);
+    content.append(&intro);
+    content.append(&effective_label);
+    content.append(&effective_entry);
+    content.append(&cadence_label);
+    content.append(&cadence_combo);
+    content.append(&weekday_label);
+    content.append(&weekday_row);
+    content.append(&interval_label);
+    content.append(&interval_entry);
+    content.append(&weekly_label);
+    content.append(&weekly_entry);
+    content.append(&end_label);
+    content.append(&end_entry);
+    content.append(&timezone_label);
+    content.append(&timezone_entry);
+    content.append(&reason_label);
+    content.append(&reason_entry);
+    content.append(&historical_confirmation);
+    content.append(&feedback);
+    content.append(&actions);
+    editor.set_child(Some(&content));
+
+    let save_editor = editor.clone();
+    let save_state = Rc::clone(state);
+    let save_list = list.clone();
+    let save_parent = parent.clone();
+    let save_effective = effective_entry.clone();
+    let save_cadence = cadence_combo.clone();
+    let save_weekdays = weekday_checks.clone();
+    let save_interval = interval_entry.clone();
+    let save_weekly = weekly_entry.clone();
+    let save_end = end_entry.clone();
+    let save_timezone = timezone_entry.clone();
+    let save_reason = reason_entry.clone();
+    let save_confirmation = historical_confirmation.clone();
+    let save_feedback = feedback.clone();
+
+    save_button.connect_clicked(move |_| {
+        let effective_from = match save_effective.text().parse::<Date>() {
+            Ok(date) => date,
+            Err(_) => {
+                save_feedback.set_text("Enter a valid effective date in YYYY-MM-DD format.");
+                return;
+            }
+        };
+
+        let timezone_id = save_timezone.text().to_string();
+        let zone = match IanaTimeZone::parse(&timezone_id) {
+            Ok(zone) => zone,
+            Err(error) => {
+                save_feedback.set_text(&format!("Invalid IANA time zone: {error}"));
+                return;
+            }
+        };
+        let today = zone.local_date_at(Timestamp::now());
+        let confirmation = if effective_from < today {
+            if !save_confirmation.is_active() {
+                save_feedback.set_text(&format!(
+                    "This change would reinterpret schedule history from {effective_from} through {today}. Review the impact and tick the confirmation before saving."
+                ));
+                return;
+            }
+            PastEditConfirmation::Confirmed
+        } else {
+            PastEditConfirmation::NotConfirmed
+        };
+
+        let cadence_id = save_cadence.active_id().map(|value| value.to_string());
+        let recurrence = match cadence_id.as_deref() {
+            Some("daily") => Recurrence::Daily,
+            Some("weekdays") => {
+                let mut mask = 0_u8;
+                for (index, check) in save_weekdays.iter().enumerate() {
+                    if check.is_active() {
+                        mask |= 1 << index;
+                    }
+                }
+                Recurrence::Weekdays { weekday_mask: mask }
+            }
+            Some("every_n_days") => match save_interval.text().parse::<u16>() {
+                Ok(interval_days) => Recurrence::EveryNDays { interval_days },
+                Err(_) => {
+                    save_feedback.set_text("Every N days must be an integer from 1 to 65535.");
+                    return;
+                }
+            },
+            Some("times_per_week") => match save_weekly.text().parse::<u8>() {
+                Ok(target_per_week) => Recurrence::TimesPerWeek { target_per_week },
+                Err(_) => {
+                    save_feedback.set_text("Weekly target must be an integer from 1 to 7.");
+                    return;
+                }
+            },
+            _ => {
+                save_feedback.set_text("Select a recurrence rule.");
+                return;
+            }
+        };
+
+        let end_date = if save_end.text().trim().is_empty() {
+            None
+        } else {
+            match save_end.text().parse::<Date>() {
+                Ok(date) => Some(date),
+                Err(_) => {
+                    save_feedback.set_text("End date must be blank or a valid YYYY-MM-DD date.");
+                    return;
+                }
+            }
+        };
+
+        let revision = NewScheduleRevision {
+            effective_from,
+            end_date,
+            recurrence,
+            time_zone_id: timezone_id,
+            change_reason: save_reason.text().to_string(),
+        };
+
+        let result = {
+            let mut connection = save_state.connection.borrow_mut();
+            append_revision(
+                &mut connection,
+                habit_id,
+                &revision,
+                today,
+                confirmation,
+            )
+        };
+        match result {
+            Ok(revision_number) => {
+                save_feedback.set_text(&format!("Saved schedule revision #{revision_number}."));
+                save_editor.close();
+                refresh_list(&save_list, &save_state, &save_parent, false);
+            }
+            Err(error) => save_feedback.set_text(&format!("Could not save schedule: {error}")),
+        }
+    });
+
+    let cancel_editor = editor.clone();
+    cancel_button.connect_clicked(move |_| cancel_editor.close());
+
+    editor.present();
+    effective_entry.grab_focus();
 }
 
 fn show_edit_window(
