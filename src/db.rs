@@ -1,5 +1,8 @@
 use crate::domain::{Cadence, CivilDate, HabitSchedule};
-use rusqlite::{Connection, Result, params};
+use crate::schedule_history::{Recurrence, TimeZoneStatus};
+use crate::timezone::IanaTimeZone;
+use jiff::Timestamp;
+use rusqlite::{Connection, OptionalExtension, Result, params};
 use std::{env, fs, path::PathBuf};
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
@@ -12,8 +15,13 @@ pub struct TodayHabit {
     pub name: String,
     pub completed: bool,
     pub paused: bool,
-    /// False means the habit is intentionally not due on the requested local date.
+    /// False means the habit is intentionally not due on this habit's local date.
     pub scheduled: bool,
+    /// The civil date used for this habit, which may differ between time zones.
+    pub local_date: Option<CivilDate>,
+    /// The canonical time zone used to resolve local_date. Legacy records use the
+    /// current system IANA zone until the user saves a verified revision.
+    pub time_zone_id: Option<String>,
 }
 
 pub fn open() -> Result<Connection> {
@@ -117,7 +125,11 @@ pub fn create_habit_with_cadence(
     cadence: Cadence,
 ) -> Result<()> {
     let normalized = validate_habit_name(name)?;
-    let start_date = local_today(connection)?;
+    let system_zone = IanaTimeZone::system()
+        .map_err(|error| invalid_schedule_field(&format!("system time zone: {error}")))?;
+    let instant = Timestamp::now();
+    let start_date = parse_civil_date(&system_zone.local_date_at(instant).to_string())
+        .ok_or_else(|| invalid_schedule_field("system local date"))?;
     HabitSchedule::new(cadence, start_date, None)
         .map_err(|_| invalid_schedule_field("new schedule"))?;
 
@@ -151,8 +163,8 @@ pub fn create_habit_with_cadence(
     transaction.execute(
         "INSERT INTO habits
             (name, tracking_type, schedule_type, weekday_mask, interval_days,
-             target_per_period, period_unit, start_date)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'week', ?7)",
+             target_per_period, period_unit, start_date, time_zone_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'week', ?7, ?8)",
         params![
             normalized,
             tracking_type,
@@ -160,12 +172,17 @@ pub fn create_habit_with_cadence(
             weekday_mask,
             interval_days,
             target_per_period,
-            start_date.to_string()
+            start_date.to_string(),
+            system_zone.id()
         ],
     )?;
     let habit_id = transaction.last_insert_rowid();
-    crate::schedule_history::ensure_habit_baseline(&transaction, habit_id)
-        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    crate::schedule_history::ensure_habit_baseline_with_timezone(
+        &transaction,
+        habit_id,
+        system_zone.id(),
+    )
+    .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     transaction.commit()?;
     Ok(())
 }
@@ -224,14 +241,67 @@ pub fn archived_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
             completed: row.get::<_, i64>(2)? != 0,
             paused: row.get::<_, i64>(3)? != 0,
             scheduled: false,
+            local_date: None,
+            time_zone_id: None,
         })
     })?;
     rows.collect()
 }
 
-/// Read the machine-local date once and use it consistently for every row in Today.
+/// Resolve every habit's local date from the IANA zone on its currently effective
+/// schedule revision. A legacy-unverified revision deliberately falls back to the
+/// current system IANA zone; historical dates are never rewritten.
 pub fn today_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
-    habits_for_date(connection, local_today(connection)?)
+    today_habits_at(connection, Timestamp::now())
+}
+
+/// Deterministic Today view for a supplied instant. Habits in different zones may
+/// legitimately display different civil dates at the same absolute instant.
+pub fn today_habits_at(connection: &Connection, instant: Timestamp) -> Result<Vec<TodayHabit>> {
+    let mut statement = connection.prepare(
+        "SELECT id, name FROM habits
+         WHERE archived_at IS NULL
+         ORDER BY sort_order, id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let active_habits = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+    active_habits
+        .into_iter()
+        .map(|(habit_id, name)| {
+            let today = resolve_habit_today(connection, habit_id, instant)?;
+            let date_text = today.local_date.to_string();
+            let (completed, paused): (bool, bool) = connection.query_row(
+                "SELECT
+                    EXISTS (
+                        SELECT 1 FROM habit_entries
+                        WHERE habit_id = ?1 AND local_date = ?2 AND status = 'completed'
+                    ),
+                    EXISTS (
+                        SELECT 1 FROM habit_pause_periods
+                        WHERE habit_id = ?1
+                          AND (
+                              ends_on IS NULL
+                              OR (starts_on <= ?2 AND ?2 < ends_on)
+                          )
+                    )",
+                params![habit_id, date_text],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+
+            Ok(TodayHabit {
+                id: habit_id,
+                name,
+                completed,
+                paused,
+                scheduled: today.scheduled,
+                local_date: Some(today.local_date),
+                time_zone_id: Some(today.time_zone_id),
+            })
+        })
+        .collect()
 }
 
 /// Deterministic schedule evaluation for a supplied civil date. This is reusable by
@@ -303,15 +373,102 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
             completed: row.get::<_, i64>(8)? != 0,
             paused: row.get::<_, i64>(9)? != 0,
             scheduled,
+            local_date: Some(date),
+            time_zone_id: None,
         })
     })?;
     rows.collect()
 }
 
-fn local_today(connection: &Connection) -> Result<CivilDate> {
-    let value: String =
-        connection.query_row("SELECT date('now', 'localtime')", [], |row| row.get(0))?;
-    parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("current local date"))
+#[derive(Debug, Clone)]
+struct ResolvedHabitToday {
+    local_date: CivilDate,
+    scheduled: bool,
+    time_zone_id: String,
+}
+
+fn resolve_habit_today(
+    connection: &Connection,
+    habit_id: i64,
+    instant: Timestamp,
+) -> Result<ResolvedHabitToday> {
+    let revisions = crate::schedule_history::revisions_for_habit_readonly(connection, habit_id)
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    if revisions.is_empty() {
+        return Err(invalid_schedule_field("missing schedule history"));
+    }
+
+    let mut latest_future: Option<(String, CivilDate)> = None;
+    for revision in revisions.iter().rev() {
+        let zone = match revision.time_zone_status {
+            TimeZoneStatus::ValidatedIana => IanaTimeZone::parse(&revision.time_zone_id)
+                .map_err(|error| invalid_schedule_field(&format!("time_zone_id: {error}")))?,
+            TimeZoneStatus::LegacyUnverified => IanaTimeZone::system()
+                .map_err(|error| invalid_schedule_field(&format!("system time zone: {error}")))?,
+        };
+        let local_date = parse_civil_date(&zone.local_date_at(instant).to_string())
+            .ok_or_else(|| invalid_schedule_field("time-zone local date"))?;
+        let effective_from = parse_civil_date(&revision.effective_from.to_string())
+            .ok_or_else(|| invalid_schedule_field("effective_from"))?;
+
+        // A future revision is interpreted in its own IANA zone. Until that zone's
+        // effective civil date arrives, the previous revision remains in force.
+        if local_date < effective_from {
+            if latest_future.is_none() {
+                latest_future = Some((zone.id().to_owned(), local_date));
+            }
+            continue;
+        }
+
+        // Once a revision has become effective, it supersedes older revisions
+        // permanently. If its own end date has passed, do not resurrect an older rule.
+        let end = revision
+            .end_date
+            .map(|value| {
+                parse_civil_date(&value.to_string())
+                    .ok_or_else(|| invalid_schedule_field("end_date"))
+            })
+            .transpose()?;
+        let before_or_on_end = end.is_none_or(|end_date| local_date <= end_date);
+        let scheduled = if before_or_on_end {
+            let cadence = cadence_from_revision(&revision.recurrence);
+            HabitSchedule::new(cadence, effective_from, end)
+                .map_err(|_| invalid_schedule_field("schedule bounds"))?
+                .period_for(local_date)
+                .is_some()
+        } else {
+            false
+        };
+
+        return Ok(ResolvedHabitToday {
+            local_date,
+            scheduled,
+            time_zone_id: zone.id().to_owned(),
+        });
+    }
+
+    let (time_zone_id, local_date) =
+        latest_future.ok_or_else(|| invalid_schedule_field("no effective schedule revision"))?;
+    Ok(ResolvedHabitToday {
+        local_date,
+        scheduled: false,
+        time_zone_id,
+    })
+}
+
+fn cadence_from_revision(recurrence: &Recurrence) -> Cadence {
+    match recurrence {
+        Recurrence::Daily => Cadence::Daily,
+        Recurrence::Weekdays { weekday_mask } => Cadence::Weekdays {
+            weekday_mask: *weekday_mask,
+        },
+        Recurrence::EveryNDays { interval_days } => Cadence::EveryNDays {
+            interval: *interval_days,
+        },
+        Recurrence::TimesPerWeek { target_per_week } => Cadence::TimesPerWeek {
+            target: *target_per_week,
+        },
+    }
 }
 
 fn cadence_from_values(
@@ -361,9 +518,20 @@ fn invalid_schedule_field(field: &str) -> rusqlite::Error {
     ))
 }
 
-/// Pause is effective from the current local date. A resume date is exclusive:
-/// resuming today makes the habit active again today, without deleting pause history.
+/// Pause/resume is effective on the habit's own current civil date.
 pub fn set_paused(connection: &Connection, habit_id: i64, paused: bool) -> Result<()> {
+    set_paused_at(connection, habit_id, paused, Timestamp::now())
+}
+
+/// Deterministic pause/resume API. The date is resolved in the currently effective
+/// schedule's IANA zone, not the machine's local zone.
+pub fn set_paused_at(
+    connection: &Connection,
+    habit_id: i64,
+    paused: bool,
+    instant: Timestamp,
+) -> Result<()> {
+    let today = resolve_habit_today(connection, habit_id, instant)?;
     let exists: bool = connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL)",
         [habit_id],
@@ -373,33 +541,109 @@ pub fn set_paused(connection: &Connection, habit_id: i64, paused: bool) -> Resul
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
-    if paused {
-        connection.execute(
-            "INSERT INTO habit_pause_periods(habit_id, starts_on)
-             SELECT ?1, date('now', 'localtime')
-             WHERE NOT EXISTS (
-                 SELECT 1 FROM habit_pause_periods
-                 WHERE habit_id = ?1 AND ends_on IS NULL
-             )",
-            [habit_id],
-        )?;
-    } else {
-        connection.execute(
-            "UPDATE habit_pause_periods
-             SET ends_on = date('now', 'localtime')
+    let date_text = today.local_date.to_string();
+    let open_start: Option<String> = connection
+        .query_row(
+            "SELECT starts_on FROM habit_pause_periods
              WHERE habit_id = ?1 AND ends_on IS NULL",
             [habit_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+
+    if paused {
+        if open_start.is_none() {
+            connection.execute(
+                "INSERT INTO habit_pause_periods(habit_id, starts_on)
+                 VALUES (?1, ?2)",
+                params![habit_id, date_text],
+            )?;
+        }
+    } else if let Some(start_date) = open_start {
+        // A schedule timezone can move the civil date backwards while a pause is
+        // open. Keep the exclusive end boundary valid and let an explicit resume
+        // close the pause without creating an end date before its start date.
+        let end_date = if date_text < start_date {
+            start_date
+        } else {
+            date_text
+        };
+        connection.execute(
+            "UPDATE habit_pause_periods
+             SET ends_on = ?2
+             WHERE habit_id = ?1 AND ends_on IS NULL",
+            params![habit_id, end_date],
         )?;
     }
     Ok(())
 }
 
 pub fn set_today_completed(connection: &Connection, habit_id: i64, completed: bool) -> Result<()> {
-    set_completed_for_date(connection, habit_id, completed, local_today(connection)?)
+    set_today_completed_at(connection, habit_id, completed, Timestamp::now())
+}
+
+/// Persist a Today check-in using the current civil date in this habit's active
+/// IANA time zone. Schedule, pause and entry lookup all use exactly the same date.
+pub fn set_today_completed_at(
+    connection: &Connection,
+    habit_id: i64,
+    completed: bool,
+    instant: Timestamp,
+) -> Result<()> {
+    let today = resolve_habit_today(connection, habit_id, instant)?;
+    let active: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM habits WHERE id = ?1 AND archived_at IS NULL)",
+        [habit_id],
+        |row| row.get(0),
+    )?;
+    if !active {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+
+    let date_text = today.local_date.to_string();
+    if completed {
+        let paused: bool = connection.query_row(
+            "SELECT EXISTS (
+                SELECT 1 FROM habit_pause_periods
+                WHERE habit_id = ?1
+                  AND (
+                      ends_on IS NULL
+                      OR (starts_on <= ?2 AND ?2 < ends_on)
+                  )
+            )",
+            params![habit_id, date_text],
+            |row| row.get(0),
+        )?;
+        if paused {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "a paused habit cannot be checked in".to_string(),
+            ));
+        }
+        if !today.scheduled {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "a habit cannot be checked in on an unscheduled local date".to_string(),
+            ));
+        }
+        connection.execute(
+            "INSERT INTO habit_entries(habit_id, local_date, status, value)
+             VALUES (?1, ?2, 'completed', 1.0)
+             ON CONFLICT(habit_id, local_date) DO UPDATE SET
+                status = 'completed', value = 1.0, updated_at = CURRENT_TIMESTAMP",
+            params![habit_id, date_text],
+        )?;
+    } else {
+        connection.execute(
+            "DELETE FROM habit_entries
+             WHERE habit_id = ?1 AND local_date = ?2 AND status = 'completed'",
+            params![habit_id, date_text],
+        )?;
+    }
+    Ok(())
 }
 
 /// Persist a check-in only when the active habit is due and not paused for that date.
 /// Undo remains allowed for an active habit even if its schedule was later edited.
+#[cfg(test)]
 fn set_completed_for_date(
     connection: &Connection,
     habit_id: i64,
@@ -539,11 +783,33 @@ mod tests {
             row,
             (
                 "daily".to_string(),
-                "legacy_unverified".to_string(),
-                "legacy".to_string(),
+                "validated_iana".to_string(),
+                "user".to_string(),
                 1,
             )
         );
+    }
+
+    #[test]
+    fn newly_created_habits_capture_a_validated_system_iana_baseline() {
+        let connection = memory_connection();
+        let system_zone = IanaTimeZone::system().expect("system zone must be a known IANA zone");
+        create_habit(&connection, "New habit with timezone").expect("create new habit");
+
+        let stored: (String, String, String, String) = connection
+            .query_row(
+                "SELECT h.time_zone_id, r.time_zone_id, r.time_zone_status, r.source
+                 FROM habits h
+                 JOIN habit_schedule_revisions r ON r.habit_id = h.id
+                 WHERE h.name = 'New habit with timezone'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("read new habit baseline");
+        assert_eq!(stored.0, system_zone.id());
+        assert_eq!(stored.1, system_zone.id());
+        assert_eq!(stored.2, "validated_iana");
+        assert_eq!(stored.3, "user");
     }
 
     #[test]
@@ -804,6 +1070,263 @@ mod tests {
         crate::schedule_history::ensure_habit_baseline(connection, habit_id)
             .expect("create initial schedule revision");
         habit_id
+    }
+
+    fn append_timezone_revision(
+        connection: &mut Connection,
+        habit_id: i64,
+        effective_from: &str,
+        time_zone_id: &str,
+    ) {
+        let effective_from = effective_from
+            .parse::<jiff::civil::Date>()
+            .expect("valid schedule effective date");
+        let revision = NewScheduleRevision {
+            effective_from,
+            end_date: None,
+            recurrence: Recurrence::Daily,
+            time_zone_id: time_zone_id.to_owned(),
+            change_reason: "Set the habit's IANA time zone".to_owned(),
+        };
+        crate::schedule_history::append_revision(
+            connection,
+            habit_id,
+            &revision,
+            effective_from,
+            PastEditConfirmation::NotConfirmed,
+        )
+        .expect("append timezone revision");
+    }
+
+    #[test]
+    fn today_uses_each_habits_own_iana_date_for_checkins_and_pause_history() {
+        let mut connection = memory_connection();
+        let kolkata_id = new_habit_with_schedule(
+            &connection,
+            "Kolkata habit",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        let los_angeles_id = new_habit_with_schedule(
+            &connection,
+            "Los Angeles habit",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        append_timezone_revision(&mut connection, kolkata_id, "2026-11-10", "Asia/Kolkata");
+        append_timezone_revision(
+            &mut connection,
+            los_angeles_id,
+            "2026-11-10",
+            "America/Los_Angeles",
+        );
+
+        let instant: Timestamp = "2026-11-17T18:30:00Z"
+            .parse()
+            .expect("valid deterministic instant");
+        let habits = today_habits_at(&connection, instant).expect("load per-zone Today");
+        let kolkata = habits.iter().find(|habit| habit.id == kolkata_id).unwrap();
+        let los_angeles = habits
+            .iter()
+            .find(|habit| habit.id == los_angeles_id)
+            .unwrap();
+
+        assert_eq!(kolkata.local_date, Some(date(2026, 11, 18)));
+        assert_eq!(kolkata.time_zone_id.as_deref(), Some("Asia/Kolkata"));
+        assert_eq!(los_angeles.local_date, Some(date(2026, 11, 17)));
+        assert_eq!(
+            los_angeles.time_zone_id.as_deref(),
+            Some("America/Los_Angeles")
+        );
+
+        set_today_completed_at(&connection, kolkata_id, true, instant)
+            .expect("save Kolkata check-in");
+        set_today_completed_at(&connection, los_angeles_id, true, instant)
+            .expect("save Los Angeles check-in");
+        let saved_dates: Vec<(i64, String)> = {
+            let mut statement = connection
+                .prepare("SELECT habit_id, local_date FROM habit_entries ORDER BY habit_id")
+                .expect("prepare saved-date query");
+            statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .expect("query saved dates")
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .expect("collect saved dates")
+        };
+        assert_eq!(
+            saved_dates,
+            vec![
+                (kolkata_id, "2026-11-18".to_owned()),
+                (los_angeles_id, "2026-11-17".to_owned())
+            ]
+        );
+
+        set_paused_at(&connection, kolkata_id, true, instant).expect("pause in Kolkata date");
+        let pause_start: String = connection
+            .query_row(
+                "SELECT starts_on FROM habit_pause_periods WHERE habit_id = ?1",
+                [kolkata_id],
+                |row| row.get(0),
+            )
+            .expect("read pause start");
+        assert_eq!(pause_start, "2026-11-18");
+
+        let resume_instant: Timestamp = "2026-11-18T18:30:00Z"
+            .parse()
+            .expect("valid resume instant");
+        set_paused_at(&connection, kolkata_id, false, resume_instant)
+            .expect("resume in Kolkata date");
+        let pause_end: String = connection
+            .query_row(
+                "SELECT ends_on FROM habit_pause_periods WHERE habit_id = ?1",
+                [kolkata_id],
+                |row| row.get(0),
+            )
+            .expect("read pause end");
+        assert_eq!(pause_end, "2026-11-19");
+    }
+
+    #[test]
+    fn future_timezone_revision_activates_at_midnight_in_its_own_zone() {
+        let mut connection = memory_connection();
+        let habit_id = new_habit_with_schedule(
+            &connection,
+            "Zone transition",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        append_timezone_revision(&mut connection, habit_id, "2026-11-02", "Asia/Kolkata");
+        append_timezone_revision(
+            &mut connection,
+            habit_id,
+            "2026-11-18",
+            "America/Los_Angeles",
+        );
+
+        let before: Timestamp = "2026-11-18T07:59:59Z"
+            .parse()
+            .expect("valid instant before Los Angeles midnight");
+        let after: Timestamp = "2026-11-18T08:00:00Z"
+            .parse()
+            .expect("valid instant at Los Angeles midnight");
+
+        let before_today = today_habits_at(&connection, before).expect("resolve old revision");
+        assert_eq!(
+            before_today[0].time_zone_id.as_deref(),
+            Some("Asia/Kolkata")
+        );
+        assert_eq!(before_today[0].local_date, Some(date(2026, 11, 18)));
+
+        let after_today = today_habits_at(&connection, after).expect("resolve new revision");
+        assert_eq!(
+            after_today[0].time_zone_id.as_deref(),
+            Some("America/Los_Angeles")
+        );
+        assert_eq!(after_today[0].local_date, Some(date(2026, 11, 18)));
+    }
+
+    #[test]
+    fn an_open_pause_remains_active_when_a_timezone_revision_moves_the_local_date_back() {
+        let mut connection = memory_connection();
+        let habit_id = new_habit_with_schedule(
+            &connection,
+            "Paused across timezone change",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        append_timezone_revision(&mut connection, habit_id, "2026-11-10", "Asia/Kolkata");
+
+        let pause_instant: Timestamp = "2026-11-17T18:30:00Z".parse().expect("valid pause instant");
+        set_paused_at(&connection, habit_id, true, pause_instant)
+            .expect("pause in Kolkata local date");
+        let start: String = connection
+            .query_row(
+                "SELECT starts_on FROM habit_pause_periods WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("read pause date");
+        assert_eq!(start, "2026-11-18");
+
+        let revision = NewScheduleRevision {
+            effective_from: jiff_date(2026, 11, 17),
+            end_date: None,
+            recurrence: Recurrence::Daily,
+            time_zone_id: "America/Los_Angeles".to_owned(),
+            change_reason: "Switch to Los Angeles local time".to_owned(),
+        };
+        crate::schedule_history::append_revision(
+            &mut connection,
+            habit_id,
+            &revision,
+            jiff_date(2026, 11, 18),
+            PastEditConfirmation::Confirmed,
+        )
+        .expect("append past-effective timezone revision after impact confirmation");
+
+        let today = today_habits_at(&connection, pause_instant).expect("load after zone change");
+        assert_eq!(today[0].local_date, Some(date(2026, 11, 17)));
+        assert!(
+            today[0].paused,
+            "an open pause must not disappear when dates shift"
+        );
+        assert!(
+            set_today_completed_at(&connection, habit_id, true, pause_instant).is_err(),
+            "an open pause must continue to block check-ins across a zone change"
+        );
+
+        set_paused_at(&connection, habit_id, false, pause_instant)
+            .expect("resume after the active timezone moves the date backwards");
+        let pause_end: String = connection
+            .query_row(
+                "SELECT ends_on FROM habit_pause_periods WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("read closed pause boundary");
+        assert_eq!(pause_end, "2026-11-18");
+        let after_resume =
+            today_habits_at(&connection, pause_instant).expect("load after explicit resume");
+        assert!(
+            !after_resume[0].paused,
+            "an explicit resume closes the pause even when the new zone's date is earlier"
+        );
+    }
+
+    #[test]
+    fn legacy_unverified_schedule_uses_system_iana_zone_without_rewriting_history() {
+        let connection = memory_connection();
+        let habit_id = new_habit_with_schedule(
+            &connection,
+            "Legacy habit",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        let instant: Timestamp = "2026-11-17T18:30:00Z"
+            .parse()
+            .expect("valid deterministic instant");
+        let system_zone = IanaTimeZone::system().expect("CI system zone must be IANA");
+        let expected_date = parse_civil_date(&system_zone.local_date_at(instant).to_string())
+            .expect("system local date");
+
+        let habits = today_habits_at(&connection, instant).expect("resolve legacy zone");
+        assert_eq!(habits[0].id, habit_id);
+        assert_eq!(habits[0].local_date, Some(expected_date));
+        assert_eq!(habits[0].time_zone_id.as_deref(), Some(system_zone.id()));
+
+        let status: String = connection
+            .query_row(
+                "SELECT time_zone_status FROM habit_schedule_revisions WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("read legacy timezone status");
+        assert_eq!(status, "legacy_unverified");
     }
 
     #[test]
