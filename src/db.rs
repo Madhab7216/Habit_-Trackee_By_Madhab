@@ -344,11 +344,6 @@ fn cadence_from_values(
     }
 }
 
-fn civil_date_from_row(row: &rusqlite::Row<'_>, index: usize, field: &str) -> Result<CivilDate> {
-    let value: String = row.get(index)?;
-    parse_civil_date(&value).ok_or_else(|| invalid_schedule_field(field))
-}
-
 fn parse_civil_date(value: &str) -> Option<CivilDate> {
     let mut parts = value.split('-');
     let year = parts.next()?.parse::<i32>().ok()?;
