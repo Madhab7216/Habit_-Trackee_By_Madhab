@@ -34,8 +34,8 @@ This PR does not invent or select a project license. The owner must choose one a
 
 ## Safety and permissions
 
-- Read-only repository permission only.
-- No repository writes, tagging, release publication, secret access, telemetry or user-data collection.
+- The checkout is read-only and persists no Git credentials. The release job can mint a short-lived OIDC identity and write repository attestation records; it cannot write source files, tags or releases.
+- No secret access, telemetry, cloud sync or personal habit-data collection is added.
 - The pipeline runs only on an explicitly selected candidate tag or a pushed `v*` tag.
 - Build, tests and SBOM generation run on the trusted candidate tag, not arbitrary pull-request code.
 - Both release executables receive signed SLSA build-provenance attestations and signed CycloneDX SBOM attestations. The workflow verifies both attestations before uploading evidence.
