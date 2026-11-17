@@ -6,9 +6,9 @@
 
 use crate::{
     db::{self, TodayHabit},
-    domain::{achievement_ratio, Cadence, CivilDate, Direction},
+    domain::{Cadence, CivilDate, Direction, achievement_ratio},
 };
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::{error::Error, fmt};
 
 const MAX_UNIT_CHARS: usize = 24;
@@ -93,18 +93,13 @@ impl MeasurementSpec {
             return Err(MeasurementError::InvalidTarget);
         }
 
-        if self.kind == MeasurementKind::Limit
-            && self.direction != MeasurementDirection::AtMost
-        {
+        if self.kind == MeasurementKind::Limit && self.direction != MeasurementDirection::AtMost {
             return Err(MeasurementError::LimitMustBeAtMost);
         }
 
         let unit = self.unit.trim();
         let count = unit.chars().count();
-        if count == 0
-            || count > MAX_UNIT_CHARS
-            || unit.chars().any(char::is_control)
-        {
+        if count == 0 || count > MAX_UNIT_CHARS || unit.chars().any(char::is_control) {
             return Err(MeasurementError::InvalidUnit);
         }
 
@@ -152,7 +147,6 @@ pub struct MeasurementRecord {
     pub note: String,
 }
 
-
 #[derive(Debug)]
 pub enum MeasurementError {
     Database(rusqlite::Error),
@@ -174,7 +168,10 @@ impl fmt::Display for MeasurementError {
         match self {
             Self::Database(error) => write!(formatter, "database error: {error}"),
             Self::UnsupportedCadence => {
-                write!(formatter, "measurable habits cannot use a weekly-frequency cadence")
+                write!(
+                    formatter,
+                    "measurable habits cannot use a weekly-frequency cadence"
+                )
             }
             Self::InvalidTarget => write!(
                 formatter,
@@ -513,12 +510,14 @@ mod tests {
         }
     }
 
-    fn new_habit(
-        connection: &mut Connection,
-        measurement: MeasurementSpec,
-    ) -> i64 {
-        create_measurable_habit(connection, "Sample measured habit", Cadence::Daily, measurement)
-            .expect("create measurable habit")
+    fn new_habit(connection: &mut Connection, measurement: MeasurementSpec) -> i64 {
+        create_measurable_habit(
+            connection,
+            "Sample measured habit",
+            Cadence::Daily,
+            measurement,
+        )
+        .expect("create measurable habit")
     }
 
     #[test]
@@ -526,7 +525,12 @@ mod tests {
         let mut connection = memory_connection();
         let id = new_habit(
             &mut connection,
-            spec(MeasurementKind::Numeric, MeasurementDirection::AtLeast, 1800.0, "ml"),
+            spec(
+                MeasurementKind::Numeric,
+                MeasurementDirection::AtLeast,
+                1800.0,
+                "ml",
+            ),
         );
 
         let config = measurement_config(&connection, id).expect("read configuration");
@@ -541,7 +545,12 @@ mod tests {
         let mut connection = memory_connection();
         let id = new_habit(
             &mut connection,
-            spec(MeasurementKind::Duration, MeasurementDirection::AtLeast, 30.0, "minutes"),
+            spec(
+                MeasurementKind::Duration,
+                MeasurementDirection::AtLeast,
+                30.0,
+                "minutes",
+            ),
         );
         let date = today(&connection);
 
@@ -563,7 +572,10 @@ mod tests {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .expect("read saved measurement");
-        assert_eq!(saved, ("completed".to_string(), 35.0, "Target met".to_string()));
+        assert_eq!(
+            saved,
+            ("completed".to_string(), 35.0, "Target met".to_string())
+        );
     }
 
     #[test]
@@ -571,7 +583,12 @@ mod tests {
         let mut connection = memory_connection();
         let id = new_habit(
             &mut connection,
-            spec(MeasurementKind::Limit, MeasurementDirection::AtMost, 2.0, "cups"),
+            spec(
+                MeasurementKind::Limit,
+                MeasurementDirection::AtMost,
+                2.0,
+                "cups",
+            ),
         );
         let date = today(&connection);
 
@@ -591,11 +608,15 @@ mod tests {
         let mut connection = memory_connection();
         let id = new_habit(
             &mut connection,
-            spec(MeasurementKind::Count, MeasurementDirection::AtLeast, 10.0, "pages"),
+            spec(
+                MeasurementKind::Count,
+                MeasurementDirection::AtLeast,
+                10.0,
+                "pages",
+            ),
         );
-        let outcome =
-            record_measurement_for_date(&connection, id, today(&connection), 7.0, "")
-                .expect("save count measurement");
+        let outcome = record_measurement_for_date(&connection, id, today(&connection), 7.0, "")
+            .expect("save count measurement");
 
         assert_eq!(outcome.status, MeasurementStatus::Partial);
         assert_eq!(outcome.actual, 7.0);
@@ -640,7 +661,12 @@ mod tests {
             "cups",
         );
         assert!(matches!(
-            create_measurable_habit(&mut connection, "Invalid limit", Cadence::Daily, invalid_limit),
+            create_measurable_habit(
+                &mut connection,
+                "Invalid limit",
+                Cadence::Daily,
+                invalid_limit
+            ),
             Err(MeasurementError::LimitMustBeAtMost)
         ));
         let count: i64 = connection
@@ -656,7 +682,12 @@ mod tests {
             &mut connection,
             "Mixed targets",
             Cadence::TimesPerWeek { target: 3 },
-            spec(MeasurementKind::Count, MeasurementDirection::AtLeast, 5.0, "pages"),
+            spec(
+                MeasurementKind::Count,
+                MeasurementDirection::AtLeast,
+                5.0,
+                "pages",
+            ),
         );
         assert!(matches!(result, Err(MeasurementError::UnsupportedCadence)));
     }
@@ -666,7 +697,12 @@ mod tests {
         let mut connection = memory_connection();
         let id = new_habit(
             &mut connection,
-            spec(MeasurementKind::Numeric, MeasurementDirection::AtLeast, 1.0, "km"),
+            spec(
+                MeasurementKind::Numeric,
+                MeasurementDirection::AtLeast,
+                1.0,
+                "km",
+            ),
         );
         let date = today(&connection);
 
@@ -678,11 +714,9 @@ mod tests {
         db::set_paused(&connection, id, false).expect("resume habit");
 
         let yesterday_text: String = connection
-            .query_row(
-                "SELECT date('now', 'localtime', '-1 day')",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT date('now', 'localtime', '-1 day')", [], |row| {
+                row.get(0)
+            })
             .expect("read yesterday");
         let yesterday = parse_date(&yesterday_text);
         assert!(matches!(
@@ -696,9 +730,11 @@ mod tests {
         let connection = memory_connection();
         db::create_habit(&connection, "Binary habit").expect("create binary habit");
         let id: i64 = connection
-            .query_row("SELECT id FROM habits WHERE name = 'Binary habit'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT id FROM habits WHERE name = 'Binary habit'",
+                [],
+                |row| row.get(0),
+            )
             .expect("read id");
 
         assert!(matches!(
@@ -712,7 +748,12 @@ mod tests {
         let mut connection = memory_connection();
         let id = new_habit(
             &mut connection,
-            spec(MeasurementKind::Numeric, MeasurementDirection::AtLeast, 1.0, "km"),
+            spec(
+                MeasurementKind::Numeric,
+                MeasurementDirection::AtLeast,
+                1.0,
+                "km",
+            ),
         );
         let date = today(&connection);
 
@@ -733,12 +774,16 @@ mod tests {
         let mut connection = memory_connection();
         let id = new_habit(
             &mut connection,
-            spec(MeasurementKind::Numeric, MeasurementDirection::AtLeast, 1.0, "km"),
+            spec(
+                MeasurementKind::Numeric,
+                MeasurementDirection::AtLeast,
+                1.0,
+                "km",
+            ),
         );
         let date = today(&connection);
 
-        record_measurement_for_date(&connection, id, date, 0.5, "")
-            .expect("record partial value");
+        record_measurement_for_date(&connection, id, date, 0.5, "").expect("record partial value");
         assert!(undo_measurement_for_date(&connection, id, date).expect("undo partial"));
 
         connection
@@ -766,7 +811,12 @@ mod tests {
             &mut connection,
             "   ",
             Cadence::Daily,
-            spec(MeasurementKind::Numeric, MeasurementDirection::AtLeast, 5.0, "pages"),
+            spec(
+                MeasurementKind::Numeric,
+                MeasurementDirection::AtLeast,
+                5.0,
+                "pages",
+            ),
         );
         assert!(matches!(result, Err(MeasurementError::Database(_))));
         let count: i64 = connection
