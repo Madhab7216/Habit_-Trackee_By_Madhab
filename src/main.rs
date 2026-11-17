@@ -514,10 +514,6 @@ fn show_schedule_window(
     end_label.set_xalign(0.0);
     let end_entry = Entry::new();
     end_entry.set_placeholder_text(Some("Leave blank for no end date"));
-    if let Some(end_date) = latest.as_ref().and_then(|revision| revision.end_date) {
-        end_entry.set_text(&end_date.to_string());
-    }
-
     let timezone_label = Label::new(Some("IANA time zone"));
     timezone_label.set_xalign(0.0);
     let timezone_entry = Entry::new();
