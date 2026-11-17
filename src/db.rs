@@ -782,8 +782,8 @@ mod tests {
             row,
             (
                 "daily".to_string(),
-                "legacy_unverified".to_string(),
-                "legacy".to_string(),
+                "validated_iana".to_string(),
+                "user".to_string(),
                 1,
             )
         );
