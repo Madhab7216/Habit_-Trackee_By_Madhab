@@ -46,6 +46,6 @@ cmp -s packaging/org.madhab.habittracker.desktop "$extract_dir/usr/share/applica
 cmp -s packaging/org.madhab.habittracker.metainfo.xml "$extract_dir/usr/share/metainfo/org.madhab.habittracker.metainfo.xml"
 cmp -s packaging/icons/hicolor/scalable/apps/org.madhab.habittracker.svg "$extract_dir/usr/share/icons/hicolor/scalable/apps/org.madhab.habittracker.svg"
 grep -Eq '^Package: madhab-habit-tracker$' "$control_dir/control"
-grep -Eq "^Version: $package_version$" "$control_dir/control"
+grep -Fqx "Version: $package_version" "$control_dir/control"
 grep -Eq '^Architecture: amd64$' "$control_dir/control"
 echo "Debian package structure, dependencies, assets and executable modes are valid."

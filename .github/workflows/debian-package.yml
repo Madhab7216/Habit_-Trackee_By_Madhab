@@ -1,9 +1,6 @@
 name: Debian package checks
 
 on:
-  push:
-    branches:
-      - work/m7-debian-package
   pull_request:
     branches:
       - work/linux-desktop-metadata
