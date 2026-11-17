@@ -314,29 +314,7 @@ pub fn initialize(connection: &mut Connection) -> Result<(), ScheduleHistoryErro
         "CREATE TABLE IF NOT EXISTS schedule_history_migrations (
             version INTEGER PRIMARY KEY,
             applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-         );
-
-         CREATE TRIGGER IF NOT EXISTS habits_schedule_fields_require_revision
-         BEFORE UPDATE OF
-             schedule_type, weekday_mask, interval_days, target_per_period,
-             period_unit, start_date, end_date, time_zone_id
-         ON habits
-         WHEN EXISTS (
-             SELECT 1 FROM habit_schedule_revisions r WHERE r.habit_id = OLD.id
-         )
-         AND (
-             NEW.schedule_type IS NOT OLD.schedule_type
-             OR NEW.weekday_mask IS NOT OLD.weekday_mask
-             OR NEW.interval_days IS NOT OLD.interval_days
-             OR NEW.target_per_period IS NOT OLD.target_per_period
-             OR NEW.period_unit IS NOT OLD.period_unit
-             OR NEW.start_date IS NOT OLD.start_date
-             OR NEW.end_date IS NOT OLD.end_date
-             OR NEW.time_zone_id IS NOT OLD.time_zone_id
-         )
-         BEGIN
-             SELECT RAISE(ABORT, 'schedule fields are versioned; append a schedule revision');
-         END;",
+         );",
     )?;
 
     let current_version: i64 = connection.query_row(
@@ -379,6 +357,29 @@ pub fn initialize(connection: &mut Connection) -> Result<(), ScheduleHistoryErro
         [],
     )?;
     transaction.commit()?;
+    connection.execute_batch(
+        "CREATE TRIGGER IF NOT EXISTS habits_schedule_fields_require_revision
+         BEFORE UPDATE OF
+             schedule_type, weekday_mask, interval_days, target_per_period,
+             period_unit, start_date, end_date, time_zone_id
+         ON habits
+         WHEN EXISTS (
+             SELECT 1 FROM habit_schedule_revisions r WHERE r.habit_id = OLD.id
+         )
+         AND (
+             NEW.schedule_type IS NOT OLD.schedule_type
+             OR NEW.weekday_mask IS NOT OLD.weekday_mask
+             OR NEW.interval_days IS NOT OLD.interval_days
+             OR NEW.target_per_period IS NOT OLD.target_per_period
+             OR NEW.period_unit IS NOT OLD.period_unit
+             OR NEW.start_date IS NOT OLD.start_date
+             OR NEW.end_date IS NOT OLD.end_date
+             OR NEW.time_zone_id IS NOT OLD.time_zone_id
+         )
+         BEGIN
+             SELECT RAISE(ABORT, 'schedule fields are versioned; append a schedule revision');
+         END;",
+    )?;
     Ok(())
 }
 
