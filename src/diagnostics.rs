@@ -59,21 +59,37 @@ impl Operation {
             Self::OpenDatabase => {
                 "The local database could not be opened. Check storage permissions and available disk space."
             }
-            Self::CreateHabit => "The habit could not be saved. Please review the input and try again.",
-            Self::LoadHabits => "Habits could not be loaded. Your local data has not been intentionally changed.",
+            Self::CreateHabit => {
+                "The habit could not be saved. Please review the input and try again."
+            }
+            Self::LoadHabits => {
+                "Habits could not be loaded. Your local data has not been intentionally changed."
+            }
             Self::RestoreHabit => "The archived habit could not be restored. Please try again.",
             Self::CompleteHabit => "The habit check-in could not be saved. Please try again.",
-            Self::ChangePauseState => "The habit pause state could not be changed. Please try again.",
+            Self::ChangePauseState => {
+                "The habit pause state could not be changed. Please try again."
+            }
             Self::ArchiveHabit => "The habit could not be archived. Please try again.",
-            Self::RenameHabit => "The habit name could not be saved. Please review the name and try again.",
-            Self::PrepareGoalStorage => "Goal storage could not be prepared. Check local storage permissions and available disk space.",
-            Self::CreateGoal => "The goal could not be created. Please review the input and try again.",
-            Self::LoadGoals => "Goals could not be loaded. Your local data has not been intentionally changed.",
+            Self::RenameHabit => {
+                "The habit name could not be saved. Please review the name and try again."
+            }
+            Self::PrepareGoalStorage => {
+                "Goal storage could not be prepared. Check local storage permissions and available disk space."
+            }
+            Self::CreateGoal => {
+                "The goal could not be created. Please review the input and try again."
+            }
+            Self::LoadGoals => {
+                "Goals could not be loaded. Your local data has not been intentionally changed."
+            }
             Self::RestoreGoal => "The archived goal could not be restored. Please try again.",
             Self::UpdateGoal => "The goal could not be updated. Please try again.",
             Self::CompleteGoal => "The goal could not be completed. Please try again.",
             Self::ArchiveGoal => "The goal could not be archived. Please try again.",
-            Self::CreateMilestone => "The milestone could not be added. Please review the input and try again.",
+            Self::CreateMilestone => {
+                "The milestone could not be added. Please review the input and try again."
+            }
             Self::LoadMilestones => "Milestones could not be loaded. Please try again.",
             Self::UpdateMilestone => "The milestone could not be updated. Please try again.",
             Self::SkipMilestone => "The milestone could not be skipped. Please try again.",
