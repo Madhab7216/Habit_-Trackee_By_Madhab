@@ -760,32 +760,32 @@ mod tests {
             target_per_period,
             period_unit,
         ) = match cadence {
-                Cadence::Daily => ("binary", "daily", None, None, None, "day"),
-                Cadence::Weekdays { weekday_mask } => (
-                    "binary",
-                    "weekdays",
-                    Some(i64::from(weekday_mask)),
-                    None,
-                    None,
-                    "day",
-                ),
-                Cadence::EveryNDays { interval } => (
-                    "binary",
-                    "every_n_days",
-                    None,
-                    Some(i64::from(interval)),
-                    None,
-                    "day",
-                ),
-                Cadence::TimesPerWeek { target } => (
-                    "frequency",
-                    "times_per_week",
-                    None,
-                    None,
-                    Some(i64::from(target)),
-                    "week",
-                ),
-            };
+            Cadence::Daily => ("binary", "daily", None, None, None, "day"),
+            Cadence::Weekdays { weekday_mask } => (
+                "binary",
+                "weekdays",
+                Some(i64::from(weekday_mask)),
+                None,
+                None,
+                "day",
+            ),
+            Cadence::EveryNDays { interval } => (
+                "binary",
+                "every_n_days",
+                None,
+                Some(i64::from(interval)),
+                None,
+                "day",
+            ),
+            Cadence::TimesPerWeek { target } => (
+                "frequency",
+                "times_per_week",
+                None,
+                None,
+                Some(i64::from(target)),
+                "week",
+            ),
+        };
         connection
             .execute(
                 "INSERT INTO habits (
