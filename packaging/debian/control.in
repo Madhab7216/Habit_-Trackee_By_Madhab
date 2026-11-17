@@ -1,0 +1,10 @@
+Package: madhab-habit-tracker
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: @ARCH@
+Depends: libc6, libgtk-4-1
+Maintainer: Madhab7216 <211662880+Madhab7216@users.noreply.github.com>
+Installed-Size: @INSTALLED_SIZE@
+Description: offline-first Linux desktop habit and goal tracker
+ A native GTK 4 habit and goal tracker using local SQLite storage.

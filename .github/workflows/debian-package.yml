@@ -1,0 +1,113 @@
+name: Debian package checks
+
+on:
+  pull_request:
+    branches:
+      - work/linux-desktop-metadata
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: debian-package-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build, install, upgrade and remove .deb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install GTK, metadata and Debian package tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential pkg-config libgtk-4-dev dpkg-dev appstream desktop-file-utils
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.100.0
+          components: rustfmt, clippy
+
+      - name: Generate build lockfile when absent
+        run: |
+          if [ ! -f Cargo.lock ]; then
+            cargo generate-lockfile
+          fi
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Compile all targets
+        run: cargo check --locked --all-targets
+
+      - name: Run Rust tests
+        run: cargo test --locked --all-targets
+
+      - name: Run strict Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Validate desktop integration metadata
+        run: |
+          desktop-file-validate packaging/org.madhab.habittracker.desktop
+          appstreamcli validate --pedantic packaging/org.madhab.habittracker.metainfo.xml
+          python3 scripts/validate-desktop-metadata.py
+
+      - name: Validate SQLite schema and audit scripts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          bash -n scripts/audit-linux-mint.sh
+          bash -n scripts/build-deb.sh
+          bash -n tests/test-deb-package.sh
+
+      - name: Build and inspect base and upgrade packages
+        run: |
+          set -euo pipefail
+          base_version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          base_package="target/packages/madhab-habit-tracker_${base_version}_amd64.deb"
+          upgrade_version="${base_version}+ci1"
+          upgrade_package="target/packages/madhab-habit-tracker_${upgrade_version}_amd64.deb"
+
+          scripts/build-deb.sh
+          tests/test-deb-package.sh "$base_package"
+          PACKAGE_VERSION="$upgrade_version" BUILD_BINARY=0 scripts/build-deb.sh
+          tests/test-deb-package.sh "$upgrade_package"
+          echo "BASE_PACKAGE=$base_package" >> "$GITHUB_ENV"
+          echo "UPGRADE_PACKAGE=$upgrade_package" >> "$GITHUB_ENV"
+          echo "BASE_VERSION=$base_version" >> "$GITHUB_ENV"
+          echo "UPGRADE_VERSION=$upgrade_version" >> "$GITHUB_ENV"
+
+      - name: Install, upgrade and remove while preserving user data
+        run: |
+          set -euo pipefail
+          test_home="$RUNNER_TEMP/madhab-user-data"
+          export XDG_DATA_HOME="$test_home/data"
+          data_dir="$XDG_DATA_HOME/madhab-habit-tracker"
+          mkdir -p "$data_dir"
+          printf 'keep-local-data-on-package-removal\n' > "$data_dir/habit-tracker.sqlite3"
+
+          sudo dpkg --install $BASE_PACKAGE
+          installed_version="$(dpkg-query -W --showformat='${Version}' madhab-habit-tracker)"
+          test "$installed_version" = "$BASE_VERSION"
+          test -x /usr/bin/madhab-habit-tracker
+          test -x /usr/bin/madhab-data-tool
+
+          sudo dpkg --install $UPGRADE_PACKAGE
+          upgraded_version="$(dpkg-query -W --showformat='${Version}' madhab-habit-tracker)"
+          test "$upgraded_version" = "$UPGRADE_VERSION"
+
+          sudo dpkg --purge madhab-habit-tracker
+          test ! -e /usr/bin/madhab-habit-tracker
+          test ! -e /usr/bin/madhab-data-tool
+          test -f "$data_dir/habit-tracker.sqlite3"
+          test "$(cat "$data_dir/habit-tracker.sqlite3")" = "keep-local-data-on-package-removal"
+          if dpkg-query -W madhab-habit-tracker >/dev/null 2>&1; then
+            echo "Package remains installed after purge." >&2
+            exit 1
+          fi
