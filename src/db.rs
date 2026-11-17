@@ -273,8 +273,10 @@ pub fn today_habits_at(connection: &Connection, instant: Timestamp) -> Result<Ve
                     EXISTS (
                         SELECT 1 FROM habit_pause_periods
                         WHERE habit_id = ?1
-                          AND starts_on <= ?2
-                          AND (ends_on IS NULL OR ?2 < ends_on)
+                          AND (
+                              ends_on IS NULL
+                              OR (starts_on <= ?2 AND ?2 < ends_on)
+                          )
                     )",
                 params![habit_id, date_text],
                 |row| Ok((row.get(0)?, row.get(1)?)),
@@ -586,8 +588,10 @@ pub fn set_today_completed_at(
             "SELECT EXISTS (
                 SELECT 1 FROM habit_pause_periods
                 WHERE habit_id = ?1
-                  AND starts_on <= ?2
-                  AND (ends_on IS NULL OR ?2 < ends_on)
+                  AND (
+                      ends_on IS NULL
+                      OR (starts_on <= ?2 AND ?2 < ends_on)
+                  )
             )",
             params![habit_id, date_text],
             |row| row.get(0),
@@ -1181,6 +1185,57 @@ mod tests {
             Some("America/Los_Angeles")
         );
         assert_eq!(after_today[0].local_date, Some(date(2026, 11, 18)));
+    }
+
+    #[test]
+    fn an_open_pause_remains_active_when_a_timezone_revision_moves_the_local_date_back() {
+        let mut connection = memory_connection();
+        let habit_id = new_habit_with_schedule(
+            &connection,
+            "Paused across timezone change",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        append_timezone_revision(&mut connection, habit_id, "2026-11-10", "Asia/Kolkata");
+
+        let pause_instant: Timestamp = "2026-11-17T18:30:00Z"
+            .parse()
+            .expect("valid pause instant");
+        set_paused_at(&connection, habit_id, true, pause_instant)
+            .expect("pause in Kolkata local date");
+        let start: String = connection
+            .query_row(
+                "SELECT starts_on FROM habit_pause_periods WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("read pause date");
+        assert_eq!(start, "2026-11-18");
+
+        let revision = NewScheduleRevision {
+            effective_from: jiff_date(2026, 11, 17),
+            end_date: None,
+            recurrence: Recurrence::Daily,
+            time_zone_id: "America/Los_Angeles".to_owned(),
+            change_reason: "Switch to Los Angeles local time".to_owned(),
+        };
+        crate::schedule_history::append_revision(
+            &mut connection,
+            habit_id,
+            &revision,
+            jiff_date(2026, 11, 18),
+            PastEditConfirmation::Confirmed,
+        )
+        .expect("append past-effective timezone revision after impact confirmation");
+
+        let today = today_habits_at(&connection, pause_instant).expect("load after zone change");
+        assert_eq!(today[0].local_date, Some(date(2026, 11, 17)));
+        assert!(today[0].paused, "an open pause must not disappear when dates shift");
+        assert!(
+            set_today_completed_at(&connection, habit_id, true, pause_instant).is_err(),
+            "an open pause must continue to block check-ins across a zone change"
+        );
     }
 
     #[test]
