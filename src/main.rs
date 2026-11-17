@@ -1,7 +1,7 @@
 pub mod db;
+pub mod diagnostics;
 pub mod domain;
 pub mod goals;
-pub mod diagnostics;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
@@ -254,7 +254,10 @@ fn refresh_list(
                 {
                     eprintln!(
                         "{}",
-                        diagnostics::format_diagnostic(diagnostics::Operation::RestoreHabit, &error)
+                        diagnostics::format_diagnostic(
+                            diagnostics::Operation::RestoreHabit,
+                            &error
+                        )
                     );
                 }
                 refresh_list(&restore_list, &restore_state, &restore_parent, true);
@@ -302,7 +305,10 @@ fn refresh_list(
                 {
                     eprintln!(
                         "{}",
-                        diagnostics::format_diagnostic(diagnostics::Operation::CompleteHabit, &error)
+                        diagnostics::format_diagnostic(
+                            diagnostics::Operation::CompleteHabit,
+                            &error
+                        )
                     );
                 }
                 refresh_list(&action_list, &action_state, &action_parent, false);
@@ -320,7 +326,10 @@ fn refresh_list(
                 {
                     eprintln!(
                         "{}",
-                        diagnostics::format_diagnostic(diagnostics::Operation::ChangePauseState, &error)
+                        diagnostics::format_diagnostic(
+                            diagnostics::Operation::ChangePauseState,
+                            &error
+                        )
                     );
                 }
                 refresh_list(&pause_list, &pause_state, &pause_parent, false);
@@ -337,7 +346,10 @@ fn refresh_list(
                 {
                     eprintln!(
                         "{}",
-                        diagnostics::format_diagnostic(diagnostics::Operation::ArchiveHabit, &error)
+                        diagnostics::format_diagnostic(
+                            diagnostics::Operation::ArchiveHabit,
+                            &error
+                        )
                     );
                 }
                 refresh_list(&archive_list, &archive_state, &archive_parent, false);
