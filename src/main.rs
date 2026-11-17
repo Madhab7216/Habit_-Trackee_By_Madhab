@@ -1,8 +1,8 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
-pub mod reviews;
 pub mod i18n;
+pub mod reviews;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;

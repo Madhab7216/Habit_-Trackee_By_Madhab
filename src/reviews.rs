@@ -99,11 +99,11 @@ fn validate_start(connection: &Connection, kind: &str, value: &str) -> Result<St
     Ok(value.to_string())
 }
 
-fn validate_note<'a>(value: &'a str) -> Result<&'a str> {
+fn validate_note<'a>(value: &'a str, field: &str) -> Result<&'a str> {
     if value.chars().count() > MAX_NOTE_CHARS {
-        return Err(invalid_field(
-            "review note must be 8,000 characters or fewer",
-        ));
+        return Err(invalid_field(&format!(
+            "{field} must be 8,000 characters or fewer"
+        )));
     }
     Ok(value)
 }
@@ -196,10 +196,10 @@ pub fn save_review(
     ensure_schema(connection)?;
     let kind = validate_kind(kind)?;
     let start = validate_start(connection, kind, period_start)?;
-    let went_well = validate_note(went_well)?;
-    let challenges = validate_note(challenges)?;
-    let lessons = validate_note(lessons)?;
-    let next_focus = validate_note(next_focus)?;
+    let went_well = validate_note(went_well, "went well")?;
+    let challenges = validate_note(challenges, "challenges")?;
+    let lessons = validate_note(lessons, "lessons")?;
+    let next_focus = validate_note(next_focus, "next focus")?;
 
     connection.query_row(
         "INSERT INTO period_reviews
@@ -327,14 +327,18 @@ fn refresh_editor(
             set_text(widgets.challenges, &review.challenges);
             set_text(widgets.lessons, &review.lessons);
             set_text(widgets.next_focus, &review.next_focus);
-            widgets.feedback.set_text(&i18n::tr("Saved review loaded from this device."));
+            widgets
+                .feedback
+                .set_text(&i18n::tr("Saved review loaded from this device."));
         }
         None => {
             set_text(widgets.wins, "");
             set_text(widgets.challenges, "");
             set_text(widgets.lessons, "");
             set_text(widgets.next_focus, "");
-            widgets.feedback.set_text(&i18n::tr("No review saved for this period yet."));
+            widgets
+                .feedback
+                .set_text(&i18n::tr("No review saved for this period yet."));
         }
     }
 
@@ -378,10 +382,7 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     description.add_css_class("dim-label");
 
     let period_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    let period_labels = [
-        i18n::tr("Weekly · Monday to Sunday"),
-        i18n::tr("Monthly"),
-    ];
+    let period_labels = [i18n::tr("Weekly · Monday to Sunday"), i18n::tr("Monthly")];
     let period_label_refs = period_labels.iter().map(String::as_str).collect::<Vec<_>>();
     let period_kind = gtk::DropDown::from_strings(&period_label_refs);
     let period_start = gtk::Entry::new();
@@ -407,7 +408,9 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     );
     let (challenges_field, challenges) = note_field(
         &i18n::tr("What was difficult?"),
-        &i18n::tr("Note obstacles or friction without treating a missed action as a personal failure."),
+        &i18n::tr(
+            "Note obstacles or friction without treating a missed action as a personal failure.",
+        ),
     );
     let (lessons_field, lessons) = note_field(
         &i18n::tr("What did I learn?"),
@@ -475,12 +478,10 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
                 };
                 refresh_editor(&current_connection.borrow(), kind, &start, &widgets);
             }
-            Err(error) => {
-                current_feedback.set_text(&i18n::format(
-                    "Could not find current period: {0}",
-                    &[&i18n::error(&error)],
-                ))
-            }
+            Err(error) => current_feedback.set_text(&i18n::format(
+                "Could not find current period: {0}",
+                &[&i18n::error(&error)],
+            )),)
         }
     });
 
@@ -525,7 +526,11 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
     let save_summary = summary.clone();
     let save_feedback = feedback.clone();
     save.connect_clicked(move |_| {
-        let kind = if save_kind.selected() == 1 { "month" } else { "week" };
+        let kind = if save_kind.selected() == 1 {
+            "month"
+        } else {
+            "week"
+        };
         match save_review(
             &save_connection.borrow(),
             kind,
