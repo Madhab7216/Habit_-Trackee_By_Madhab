@@ -438,19 +438,21 @@ fn refresh_list(
                     let undo_list = list.clone();
                     let undo_parent = parent.clone();
                     let undo_habit_id = habit.id;
-                    undo_action.connect_clicked(move |_| match measurable_habits::local_today_date(
-                        &undo_state.connection.borrow(),
-                    )
-                    .and_then(|date| {
-                        measurable_habits::undo_measurement_for_date(
+                    undo_action.connect_clicked(
+                        move |_| match measurable_habits::local_today_date(
                             &undo_state.connection.borrow(),
-                            undo_habit_id,
-                            date,
                         )
-                    }) {
-                        Ok(_) => refresh_list(&undo_list, &undo_state, &undo_parent, false),
-                        Err(error) => eprintln!("Could not undo measurement: {error}"),
-                    });
+                        .and_then(|date| {
+                            measurable_habits::undo_measurement_for_date(
+                                &undo_state.connection.borrow(),
+                                undo_habit_id,
+                                date,
+                            )
+                        }) {
+                            Ok(_) => refresh_list(&undo_list, &undo_state, &undo_parent, false),
+                            Err(error) => eprintln!("Could not undo measurement: {error}"),
+                        },
+                    );
                     row_content.append(&undo_action);
                 }
             } else {
@@ -576,11 +578,13 @@ fn show_measurement_window(
         0.1
     };
     let value_input = SpinButton::with_range(0.0, 1_000_000_000.0, step);
-    value_input.set_digits(if config.kind == measurable_habits::MeasurementKind::Count {
-        0
-    } else {
-        2
-    });
+    value_input.set_digits(
+        if config.kind == measurable_habits::MeasurementKind::Count {
+            0
+        } else {
+            2
+        },
+    );
     if let Some(record) = &saved {
         value_input.set_value(record.actual);
     } else {
