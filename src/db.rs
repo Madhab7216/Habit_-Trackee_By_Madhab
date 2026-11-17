@@ -733,6 +733,9 @@ mod tests {
         assert!(archive_habit(&connection, 999).is_err());
         assert!(restore_habit(&connection, 999).is_err());
     }
+    use crate::schedule_history::{NewScheduleRevision, PastEditConfirmation, Recurrence};
+    use jiff::civil::date as jiff_date;
+
     fn date(year: i32, month: u8, day: u8) -> CivilDate {
         CivilDate::new(year, month, day).expect("valid test date")
     }
@@ -746,33 +749,87 @@ mod tests {
             .expect("read habit id")
     }
 
+    fn new_habit_with_schedule(
+        connection: &Connection,
+        name: &str,
+        cadence: Cadence,
+        start: CivilDate,
+        end: Option<CivilDate>,
+    ) -> i64 {
+        let (schedule_type, weekday_mask, interval_days, target_per_period, period_unit) =
+            match cadence {
+                Cadence::Daily => ("daily", None, None, None, "day"),
+                Cadence::Weekdays { weekday_mask } => (
+                    "weekdays",
+                    Some(i64::from(weekday_mask)),
+                    None,
+                    None,
+                    "day",
+                ),
+                Cadence::EveryNDays { interval } => (
+                    "every_n_days",
+                    None,
+                    Some(i64::from(interval)),
+                    None,
+                    "day",
+                ),
+                Cadence::TimesPerWeek { target } => (
+                    "times_per_week",
+                    None,
+                    None,
+                    Some(i64::from(target)),
+                    "week",
+                ),
+            };
+        connection
+            .execute(
+                "INSERT INTO habits (
+                    name, schedule_type, weekday_mask, interval_days,
+                    target_per_period, period_unit, start_date, end_date
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    name,
+                    schedule_type,
+                    weekday_mask,
+                    interval_days,
+                    target_per_period,
+                    period_unit,
+                    start.to_string(),
+                    end.map(|value| value.to_string())
+                ],
+            )
+            .expect("insert habit with initial schedule");
+        let habit_id = connection.last_insert_rowid();
+        crate::schedule_history::ensure_habit_baseline(connection, habit_id)
+            .expect("create initial schedule revision");
+        habit_id
+    }
+
     #[test]
     fn persisted_weekday_schedule_only_marks_selected_days() {
         let connection = memory_connection();
-        let habit_id = new_habit(&connection, "Walk");
-        connection
-            .execute(
-                "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
-                start_date = '2026-11-01' WHERE id = ?1",
-                [habit_id],
-            )
-            .expect("set Monday-only schedule");
+        new_habit_with_schedule(
+            &connection,
+            "Walk",
+            Cadence::Weekdays { weekday_mask: 1 },
+            date(2026, 11, 1),
+            None,
+        );
 
         assert!(habits_for_date(&connection, date(2026, 11, 16)).unwrap()[0].scheduled);
         assert!(!habits_for_date(&connection, date(2026, 11, 15)).unwrap()[0].scheduled);
     }
 
     #[test]
-    fn every_n_days_uses_start_anchor_and_date_bounds() {
+    fn every_n_days_uses_revision_start_anchor_and_date_bounds() {
         let connection = memory_connection();
-        let habit_id = new_habit(&connection, "Stretch");
-        connection
-            .execute(
-                "UPDATE habits SET schedule_type = 'every_n_days', interval_days = 2,
-                start_date = '2026-11-01', end_date = '2026-11-10' WHERE id = ?1",
-                [habit_id],
-            )
-            .expect("set every-two-days schedule");
+        new_habit_with_schedule(
+            &connection,
+            "Stretch",
+            Cadence::EveryNDays { interval: 2 },
+            date(2026, 11, 1),
+            Some(date(2026, 11, 10)),
+        );
 
         assert!(habits_for_date(&connection, date(2026, 11, 3)).unwrap()[0].scheduled);
         assert!(!habits_for_date(&connection, date(2026, 11, 4)).unwrap()[0].scheduled);
@@ -783,30 +840,66 @@ mod tests {
     #[test]
     fn weekly_frequency_uses_a_monday_anchored_evaluation_period() {
         let connection = memory_connection();
-        let habit_id = new_habit(&connection, "Practice piano");
-        connection
-            .execute(
-                "UPDATE habits SET schedule_type = 'times_per_week', target_per_period = 3,
-                period_unit = 'week', start_date = '2026-11-01' WHERE id = ?1",
-                [habit_id],
-            )
-            .expect("set times-per-week schedule");
+        new_habit_with_schedule(
+            &connection,
+            "Practice piano",
+            Cadence::TimesPerWeek { target: 3 },
+            date(2026, 11, 1),
+            None,
+        );
 
         assert!(habits_for_date(&connection, date(2026, 11, 9)).unwrap()[0].scheduled);
         assert!(habits_for_date(&connection, date(2026, 11, 14)).unwrap()[0].scheduled);
     }
 
     #[test]
+    fn checkins_use_the_effective_schedule_revision_and_never_revive_an_expired_rule() {
+        let mut connection = memory_connection();
+        let habit_id = new_habit(&connection, "Read");
+        let revision = NewScheduleRevision {
+            effective_from: jiff_date(2026, 11, 20),
+            end_date: Some(jiff_date(2026, 11, 22)),
+            recurrence: Recurrence::Weekdays {
+                weekday_mask: 0b001_1111,
+            },
+            time_zone_id: "Asia/Kolkata".to_owned(),
+            change_reason: "Switch to weekdays".to_owned(),
+        };
+        crate::schedule_history::append_revision(
+            &mut connection,
+            habit_id,
+            &revision,
+            jiff_date(2026, 11, 17),
+            PastEditConfirmation::NotConfirmed,
+        )
+        .expect("append future weekday schedule");
+
+        assert!(habits_for_date(&connection, date(2026, 11, 19)).unwrap()[0].scheduled);
+        assert!(habits_for_date(&connection, date(2026, 11, 20)).unwrap()[0].scheduled);
+        assert!(!habits_for_date(&connection, date(2026, 11, 21)).unwrap()[0].scheduled);
+        assert!(
+            !habits_for_date(&connection, date(2026, 11, 23)).unwrap()[0].scheduled,
+            "the superseded daily baseline must not reappear after revision 2 expires"
+        );
+
+        assert!(
+            set_completed_for_date(&connection, habit_id, true, date(2026, 11, 21)).is_err(),
+            "check-ins on dates excluded by the active revision must be rejected"
+        );
+        set_completed_for_date(&connection, habit_id, true, date(2026, 11, 20))
+            .expect("save check-in on a scheduled weekday");
+    }
+
+    #[test]
     fn unscheduled_checkins_are_rejected_and_due_checkins_are_saved() {
         let connection = memory_connection();
-        let habit_id = new_habit(&connection, "Read");
-        connection
-            .execute(
-                "UPDATE habits SET schedule_type = 'weekdays', weekday_mask = 1,
-                start_date = '2026-11-01' WHERE id = ?1",
-                [habit_id],
-            )
-            .expect("set Monday-only schedule");
+        let habit_id = new_habit_with_schedule(
+            &connection,
+            "Read",
+            Cadence::Weekdays { weekday_mask: 1 },
+            date(2026, 11, 1),
+            None,
+        );
 
         assert!(set_completed_for_date(&connection, habit_id, true, date(2026, 11, 15)).is_err());
         set_completed_for_date(&connection, habit_id, true, date(2026, 11, 16))
