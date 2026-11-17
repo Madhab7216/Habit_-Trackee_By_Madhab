@@ -411,6 +411,38 @@ pub fn ensure_habit_baseline(
     Ok(())
 }
 
+/// Create a validated IANA baseline for a brand-new habit.
+///
+/// Existing rows discovered during a migration must continue to use
+/// `initialize()` and remain `legacy_unverified`; this helper is only for
+/// the explicit new-habit creation path where the current system zone is known.
+pub fn ensure_habit_baseline_with_timezone(
+    connection: &Connection,
+    habit_id: i64,
+    time_zone_id: &str,
+) -> Result<(), ScheduleHistoryError> {
+    let zone = IanaTimeZone::parse(time_zone_id)
+        .map_err(|_| ScheduleHistoryError::InvalidTimeZone)?;
+    connection.execute(
+        "INSERT INTO habit_schedule_revisions (
+            habit_id, revision_no, effective_from, end_date, schedule_type,
+            weekday_mask, interval_days, target_per_period, period_unit,
+            time_zone_id, time_zone_status, source, change_reason
+         )
+         SELECT h.id, 1, h.start_date, h.end_date, h.schedule_type,
+                h.weekday_mask, h.interval_days, h.target_per_period, h.period_unit,
+                ?2, 'validated_iana', 'user',
+                'Default IANA zone captured when the habit was created'
+         FROM habits h
+         WHERE h.id = ?1
+           AND NOT EXISTS (
+               SELECT 1 FROM habit_schedule_revisions r WHERE r.habit_id = h.id
+           )",
+        params![habit_id, zone.id()],
+    )?;
+    Ok(())
+}
+
 /// Append an immutable schedule revision.
 ///
 /// The effective date is inclusive. If it is before today, callers must pass
