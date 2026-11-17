@@ -5,7 +5,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 BINARY="$ROOT/target/debug/madhab-habit-tracker"
 CHECKER="$ROOT/scripts/check-accessibility-tree.py"
 
-for dependency in xvfb-run dbus-run-session python3; do
+for dependency in xvfb-run dbus-run-session python3 xdotool; do
   if ! command -v "$dependency" >/dev/null 2>&1; then
     printf 'Missing accessibility-test dependency: %s\n' "$dependency" >&2
     exit 2
