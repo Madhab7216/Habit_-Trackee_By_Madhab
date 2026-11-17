@@ -436,8 +436,8 @@ fn resolve_habit_today(
         });
     }
 
-    let (time_zone_id, local_date) = latest_future
-        .ok_or_else(|| invalid_schedule_field("no effective schedule revision"))?;
+    let (time_zone_id, local_date) =
+        latest_future.ok_or_else(|| invalid_schedule_field("no effective schedule revision"))?;
     Ok(ResolvedHabitToday {
         local_date,
         scheduled: false,
@@ -1070,12 +1070,7 @@ mod tests {
             date(2026, 11, 1),
             None,
         );
-        append_timezone_revision(
-            &mut connection,
-            kolkata_id,
-            "2026-11-10",
-            "Asia/Kolkata",
-        );
+        append_timezone_revision(&mut connection, kolkata_id, "2026-11-10", "Asia/Kolkata");
         append_timezone_revision(
             &mut connection,
             los_angeles_id,
@@ -1174,7 +1169,10 @@ mod tests {
             .expect("valid instant at Los Angeles midnight");
 
         let before_today = today_habits_at(&connection, before).expect("resolve old revision");
-        assert_eq!(before_today[0].time_zone_id.as_deref(), Some("Asia/Kolkata"));
+        assert_eq!(
+            before_today[0].time_zone_id.as_deref(),
+            Some("Asia/Kolkata")
+        );
         assert_eq!(before_today[0].local_date, Some(date(2026, 11, 18)));
 
         let after_today = today_habits_at(&connection, after).expect("resolve new revision");
