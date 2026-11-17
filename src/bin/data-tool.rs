@@ -1,5 +1,7 @@
 #[path = "../db.rs"]
 pub mod db;
+#[path = "../diagnostics.rs"]
+pub mod diagnostics;
 #[path = "../domain.rs"]
 pub mod domain;
 #[path = "../portability.rs"]
@@ -11,7 +13,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("madhab-data-tool: {error}");
+            eprintln!("{}", diagnostics::format_cli_diagnostic(error.as_ref()));
             ExitCode::FAILURE
         }
     }
@@ -24,16 +26,16 @@ fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
         [_, command, destination] if command == "export-csv" => {
             let mut connection = db::open()?;
             portability::export_csv_bundle(&mut connection, Path::new(destination))?;
-            println!("CSV export created and synced to: {destination}");
+            println!("CSV export created and synced.");
         }
         [_, command, destination] if command == "backup" => {
             let connection = db::open()?;
             portability::create_verified_backup(&connection, Path::new(destination))?;
-            println!("Verified database backup created: {destination}");
+            println!("Verified database backup created.");
         }
         [_, command, backup, destination] if command == "restore" => {
             portability::restore_backup_to_new_file(Path::new(backup), Path::new(destination))?;
-            println!("Backup verified and restored to a new database: {destination}");
+            println!("Backup verified and restored to a new local database.");
             println!("The active application database was not changed.");
         }
         [_, command, backup] if command == "verify" => {
