@@ -756,10 +756,11 @@ mod tests {
         start: CivilDate,
         end: Option<CivilDate>,
     ) -> i64 {
-        let (schedule_type, weekday_mask, interval_days, target_per_period, period_unit) =
+        let (tracking_type, schedule_type, weekday_mask, interval_days, target_per_period, period_unit) =
             match cadence {
-                Cadence::Daily => ("daily", None, None, None, "day"),
+                Cadence::Daily => ("binary", "daily", None, None, None, "day"),
                 Cadence::Weekdays { weekday_mask } => (
+                    "binary",
                     "weekdays",
                     Some(i64::from(weekday_mask)),
                     None,
@@ -767,6 +768,7 @@ mod tests {
                     "day",
                 ),
                 Cadence::EveryNDays { interval } => (
+                    "binary",
                     "every_n_days",
                     None,
                     Some(i64::from(interval)),
@@ -774,6 +776,7 @@ mod tests {
                     "day",
                 ),
                 Cadence::TimesPerWeek { target } => (
+                    "frequency",
                     "times_per_week",
                     None,
                     None,
@@ -784,11 +787,12 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO habits (
-                    name, schedule_type, weekday_mask, interval_days,
+                    name, tracking_type, schedule_type, weekday_mask, interval_days,
                     target_per_period, period_unit, start_date, end_date
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     name,
+                    tracking_type,
                     schedule_type,
                     weekday_mask,
                     interval_days,
