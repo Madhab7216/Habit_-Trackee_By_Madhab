@@ -16,6 +16,10 @@ REQUIRED_FILES = (
     ".github/workflows/engineering-checks.yml",
     ".github/workflows/data-portability.yml",
     ".github/workflows/rust-sbom.yml",
+    ".github/workflows/release-candidate-gate.yml",
+    ".github/workflows/release-attestation-contract.yml",
+    "docs/RELEASE_CANDIDATE_GATE.md",
+    "tests/test_release_attestations.py",
     "rust-toolchain.toml",
     "SECURITY.md",
     "docs/RELEASE_READINESS.md",
@@ -195,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("RELEASE CANDIDATE: PREFLIGHT PASSED")
     print(f"Package manifest, lockfile, license, security policy and release metadata are present for {args.ref}.")
-    print("The locked build, test, Clippy, packaging and SBOM jobs must still pass.")
+    print("The locked build, test, Clippy, packaging, SBOM and signed-attestation verification jobs must still pass.")
     return 0
 
 

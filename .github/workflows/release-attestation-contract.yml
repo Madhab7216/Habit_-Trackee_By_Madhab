@@ -1,0 +1,32 @@
+name: Release attestation contract
+
+on:
+  push:
+    branches:
+      - work/release-signed-artifact-attestations
+  pull_request:
+    branches:
+      - work/release-candidate-gate
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-attestation-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test signed-release workflow contract
+        run: python3 -m unittest discover -s tests -p 'test_release_attestations.py' -v
+
+      - name: Re-run release preflight regression tests
+        run: python3 -m unittest discover -s tests -p 'test_release_readiness.py' -v

@@ -25,6 +25,9 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - name: Check out the selected candidate tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,6 +73,9 @@ jobs:
       - name: Run strict Clippy with the committed lockfile
         run: cargo clippy --locked --all-targets -- -D warnings
 
+      - name: Build both release executables with the committed lockfile
+        run: cargo build --locked --release --bin madhab-habit-tracker --bin madhab-data-tool
+
       - name: Run schema and SBOM validator tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
@@ -91,16 +97,51 @@ jobs:
       - name: Validate candidate SBOM
         run: python3 scripts/validate_sbom.py sbom.json
 
+      - name: Generate SLSA build provenance for release executables
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            target/release/madhab-habit-tracker
+            target/release/madhab-data-tool
+
+      - name: Generate CycloneDX SBOM attestation for release executables
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            target/release/madhab-habit-tracker
+            target/release/madhab-data-tool
+          sbom-path: sbom.json
+
+      - name: Verify provenance and CycloneDX SBOM attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for artifact in \
+            target/release/madhab-habit-tracker \
+            target/release/madhab-data-tool
+          do
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY"
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
+              --predicate-type https://cyclonedx.org/bom
+          done
+
       - name: Create release evidence checksums
         run: |
           sha256sum sbom.json > sbom.json.sha256
           sha256sum candidate-metadata.json > candidate-metadata.json.sha256
+          sha256sum target/release/madhab-habit-tracker > madhab-habit-tracker.sha256
+          sha256sum target/release/madhab-data-tool > madhab-data-tool.sha256
 
       - name: Upload release candidate evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: madhab-release-evidence-${{ github.sha }}
           path: |
+            target/release/madhab-habit-tracker
+            target/release/madhab-data-tool
+            madhab-habit-tracker.sha256
+            madhab-data-tool.sha256
             sbom.json
             sbom.json.sha256
             candidate-metadata.json
