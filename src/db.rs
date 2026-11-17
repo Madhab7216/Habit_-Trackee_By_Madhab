@@ -1199,9 +1199,7 @@ mod tests {
         );
         append_timezone_revision(&mut connection, habit_id, "2026-11-10", "Asia/Kolkata");
 
-        let pause_instant: Timestamp = "2026-11-17T18:30:00Z"
-            .parse()
-            .expect("valid pause instant");
+        let pause_instant: Timestamp = "2026-11-17T18:30:00Z".parse().expect("valid pause instant");
         set_paused_at(&connection, habit_id, true, pause_instant)
             .expect("pause in Kolkata local date");
         let start: String = connection
@@ -1231,7 +1229,10 @@ mod tests {
 
         let today = today_habits_at(&connection, pause_instant).expect("load after zone change");
         assert_eq!(today[0].local_date, Some(date(2026, 11, 17)));
-        assert!(today[0].paused, "an open pause must not disappear when dates shift");
+        assert!(
+            today[0].paused,
+            "an open pause must not disappear when dates shift"
+        );
         assert!(
             set_today_completed_at(&connection, habit_id, true, pause_instant).is_err(),
             "an open pause must continue to block check-ins across a zone change"
