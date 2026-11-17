@@ -1288,8 +1288,8 @@ mod tests {
             )
             .expect("read closed pause boundary");
         assert_eq!(pause_end, "2026-11-18");
-        let after_resume = today_habits_at(&connection, pause_instant)
-            .expect("load after explicit resume");
+        let after_resume =
+            today_habits_at(&connection, pause_instant).expect("load after explicit resume");
         assert!(
             !after_resume[0].paused,
             "an explicit resume closes the pause even when the new zone's date is earlier"
