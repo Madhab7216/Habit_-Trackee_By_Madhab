@@ -643,6 +643,7 @@ pub fn set_today_completed_at(
 
 /// Persist a check-in only when the active habit is due and not paused for that date.
 /// Undo remains allowed for an active habit even if its schedule was later edited.
+#[cfg(test)]
 fn set_completed_for_date(
     connection: &Connection,
     habit_id: i64,
