@@ -1,7 +1,7 @@
-#[path = "../diagnostics.rs"]
-pub mod diagnostics;
 #[path = "../db.rs"]
 pub mod db;
+#[path = "../diagnostics.rs"]
+pub mod diagnostics;
 #[path = "../domain.rs"]
 pub mod domain;
 #[path = "../portability.rs"]
