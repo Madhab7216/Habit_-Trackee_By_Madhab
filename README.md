@@ -71,6 +71,18 @@ cargo run
 
 The audit script does not install packages, invoke sudo, modify system settings or access the network.
 
+## Debian package preview
+
+A native Debian package recipe for Linux Mint x86_64 (amd64) is provided by the M7 packaging increment:
+
+```bash
+sudo apt install dpkg-dev
+scripts/build-deb.sh
+sudo apt install ./target/packages/madhab-habit-tracker_0.1.0_amd64.deb
+```
+
+Build prerequisites, upgrade/removal guidance and package lifecycle validation are documented in [Debian package and Linux Mint installation](docs/DEBIAN_PACKAGE.md). This is still an engineering preview: use a verified backup, and do not treat it as a signed update channel or stable release.
+
 ## Local data and safety
 
 The application database is stored at:
@@ -91,12 +103,13 @@ If neither path is an absolute usable location, the app refuses to place persona
 - [Goals and milestones](docs/M5_GOALS_MILESTONES.md)
 - [Scoring policy](docs/SCORING_POLICY.md)
 - [Data portability](docs/DATA_PORTABILITY.md)
+- [Debian package and Linux Mint installation](docs/DEBIAN_PACKAGE.md)
 
 ## Release blockers
 
 - Fresh GitHub Actions run must pass on the latest pull-request head.
 - Launch and exercise the app on the actual supported Linux Mint workstation; CI compile is not a substitute.
-- Complete Bengali/English localization, keyboard/screen-reader accessibility, timezone/DST behavior and packaging.
+- Complete Bengali/English localization, keyboard/screen-reader accessibility and per-habit timezone/DST integration. PR #39 adds a Debian package build and install/upgrade/purge test path; exact-head CI and real Linux Mint workstation validation must pass before this release gate can be closed.
 - Add effective-dated schedule history or explicit confirmation before schedule edits change historical scoring.
 - Choose and add an explicit open-source license before accepting external contributions.
 
