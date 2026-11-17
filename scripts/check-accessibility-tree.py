@@ -137,6 +137,23 @@ def send_mnemonic(key: str) -> None:
     )
 
 
+def focused_list_item(window: object):
+    # GtkDropDown opens its option list on mnemonic activation. GTK may report
+    # the focused option as an unnamed AT-SPI "list item" rather than the
+    # combo-box itself. The smoke app uses a fresh empty database, so the only
+    # list item in the Today window during this check belongs to the dropdown.
+    for node in walk_tree(window):
+        if read_text(node, "get_role_name").lower() != "list item":
+            continue
+        try:
+            states = node.get_state_set()
+            if states is not None and states.contains(Atspi.StateType.FOCUSED):
+                return node
+        except Exception:
+            continue
+    return None
+
+
 def verify_mnemonic_focus(
     window: object, key: str, field_name: str, roles: set[str], timeout: float = 3.0
 ) -> bool:
@@ -150,6 +167,8 @@ def verify_mnemonic_focus(
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if focused_control(window, field_name, roles) is not None:
+            return True
+        if field_name == "Schedule" and focused_list_item(window) is not None:
             return True
         time.sleep(0.1)
 
