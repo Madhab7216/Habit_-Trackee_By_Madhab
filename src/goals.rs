@@ -335,7 +335,10 @@ pub fn unlink_habit_from_goal(connection: &Connection, goal_id: i64, habit_id: i
 
 pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Connection>>) {
     if let Err(error) = ensure_schema(&connection.borrow()) {
-        eprintln!("{}", diagnostics::format_diagnostic(Operation::PrepareGoalStorage, &error));
+        eprintln!(
+            "{}",
+            diagnostics::format_diagnostic(Operation::PrepareGoalStorage, &error)
+        );
         return;
     }
 
@@ -425,7 +428,10 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
                 refresh_goal_list(&add_list, &add_window, &add_connection, false);
             }
             Err(error) => {
-                eprintln!("{}", diagnostics::format_diagnostic(Operation::CreateGoal, &error));
+                eprintln!(
+                    "{}",
+                    diagnostics::format_diagnostic(Operation::CreateGoal, &error)
+                );
                 add_feedback.set_text(Operation::CreateGoal.user_message());
             }
         }
@@ -469,7 +475,10 @@ fn refresh_goal_list(
     let goals = match list_goals(&connection.borrow(), archived_view) {
         Ok(goals) => goals,
         Err(error) => {
-            eprintln!("{}", diagnostics::format_diagnostic(Operation::LoadGoals, &error));
+            eprintln!(
+                "{}",
+                diagnostics::format_diagnostic(Operation::LoadGoals, &error)
+            );
             append_list_message(list, Operation::LoadGoals.user_message());
             return;
         }
@@ -567,7 +576,10 @@ fn refresh_goal_list(
                 if let Err(error) =
                     set_goal_status(&restore_connection.borrow(), restore_id, "active")
                 {
-                    eprintln!("{}", diagnostics::format_diagnostic(Operation::RestoreGoal, &error));
+                    eprintln!(
+                        "{}",
+                        diagnostics::format_diagnostic(Operation::RestoreGoal, &error)
+                    );
                 }
                 refresh_goal_list(&restore_list, &restore_parent, &restore_connection, true);
             });
@@ -592,7 +604,10 @@ fn refresh_goal_list(
                 if let Err(error) =
                     set_goal_status(&state_connection.borrow(), state_id, new_status)
                 {
-                    eprintln!("{}", diagnostics::format_diagnostic(Operation::UpdateGoal, &error));
+                    eprintln!(
+                        "{}",
+                        diagnostics::format_diagnostic(Operation::UpdateGoal, &error)
+                    );
                 }
                 refresh_goal_list(&state_list, &state_parent, &state_connection, false);
             });
@@ -608,7 +623,10 @@ fn refresh_goal_list(
                 if let Err(error) =
                     set_goal_status(&complete_connection.borrow(), complete_id, "completed")
                 {
-                    eprintln!("{}", diagnostics::format_diagnostic(Operation::CompleteGoal, &error));
+                    eprintln!(
+                        "{}",
+                        diagnostics::format_diagnostic(Operation::CompleteGoal, &error)
+                    );
                 }
                 refresh_goal_list(
                     &complete_list,
@@ -628,7 +646,10 @@ fn refresh_goal_list(
                 if let Err(error) =
                     set_goal_status(&archive_connection.borrow(), archive_id, "archived")
                 {
-                    eprintln!("{}", diagnostics::format_diagnostic(Operation::ArchiveGoal, &error));
+                    eprintln!(
+                        "{}",
+                        diagnostics::format_diagnostic(Operation::ArchiveGoal, &error)
+                    );
                 }
                 refresh_goal_list(&archive_list, &archive_parent, &archive_connection, false);
             });
@@ -717,7 +738,10 @@ fn open_goal_editor(
                 refresh_goal_list(&save_list, &save_parent, &save_connection, archived_view);
             }
             Err(error) => {
-                eprintln!("{}", diagnostics::format_diagnostic(Operation::UpdateGoal, &error));
+                eprintln!(
+                    "{}",
+                    diagnostics::format_diagnostic(Operation::UpdateGoal, &error)
+                );
                 save_feedback.set_text(Operation::UpdateGoal.user_message());
             }
         }
@@ -801,7 +825,10 @@ fn open_milestones_window(
                 refresh_milestone_list(&add_list, &add_window, &add_connection, goal_id);
             }
             Err(error) => {
-                eprintln!("{}", diagnostics::format_diagnostic(Operation::CreateMilestone, &error));
+                eprintln!(
+                    "{}",
+                    diagnostics::format_diagnostic(Operation::CreateMilestone, &error)
+                );
                 add_feedback.set_text(Operation::CreateMilestone.user_message());
             }
         }
@@ -824,7 +851,10 @@ fn refresh_milestone_list(
     let milestones = match list_milestones(&connection.borrow(), goal_id) {
         Ok(milestones) => milestones,
         Err(error) => {
-            eprintln!("{}", diagnostics::format_diagnostic(Operation::LoadMilestones, &error));
+            eprintln!(
+                "{}",
+                diagnostics::format_diagnostic(Operation::LoadMilestones, &error)
+            );
             append_list_message(list, Operation::LoadMilestones.user_message());
             return;
         }
@@ -867,7 +897,10 @@ fn refresh_milestone_list(
             if let Err(error) =
                 set_milestone_status(&milestone_connection.borrow(), milestone_id, next_status)
             {
-                eprintln!("{}", diagnostics::format_diagnostic(Operation::UpdateMilestone, &error));
+                eprintln!(
+                    "{}",
+                    diagnostics::format_diagnostic(Operation::UpdateMilestone, &error)
+                );
             }
             refresh_milestone_list(
                 &milestone_list,
@@ -895,7 +928,10 @@ fn refresh_milestone_list(
             if let Err(error) =
                 set_milestone_status(&skip_connection.borrow(), skip_id, skip_status)
             {
-                eprintln!("{}", diagnostics::format_diagnostic(Operation::SkipMilestone, &error));
+                eprintln!(
+                    "{}",
+                    diagnostics::format_diagnostic(Operation::SkipMilestone, &error)
+                );
             }
             refresh_milestone_list(&skip_list, &skip_parent, &skip_connection, goal_id);
         });
