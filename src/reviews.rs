@@ -481,7 +481,7 @@ pub fn open_window(parent: &gtk::ApplicationWindow, connection: Rc<RefCell<Conne
             Err(error) => current_feedback.set_text(&i18n::format(
                 "Could not find current period: {0}",
                 &[&i18n::error(&error)],
-            )),)
+            )),
         }
     });
 
