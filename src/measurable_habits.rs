@@ -11,6 +11,8 @@ use crate::{
 use rusqlite::{Connection, OptionalExtension, params};
 use std::{error::Error, fmt};
 
+type StoredMeasurementConfig = (String, String, Option<f64>, Option<String>, Option<String>);
+
 const MAX_UNIT_CHARS: usize = 24;
 const MAX_NOTE_CHARS: usize = 500;
 
@@ -262,7 +264,7 @@ pub fn measurement_config(
     connection: &Connection,
     habit_id: i64,
 ) -> Result<MeasurementConfig, MeasurementError> {
-    let saved: Option<(String, String, Option<f64>, Option<String>, Option<String>)> = connection
+    let saved: Option<StoredMeasurementConfig> = connection
         .query_row(
             "SELECT tracking_type, direction, target_value, unit, archived_at
              FROM habits WHERE id = ?1",
