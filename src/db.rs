@@ -411,18 +411,16 @@ fn resolve_habit_today(
 
         // Once a revision has become effective, it supersedes older revisions
         // permanently. If its own end date has passed, do not resurrect an older rule.
-        let before_or_on_end = revision.end_date.is_none_or(|end| {
-            local_date.to_string() <= end.to_string()
-        });
+        let end = revision
+            .end_date
+            .map(|value| {
+                parse_civil_date(&value.to_string())
+                    .ok_or_else(|| invalid_schedule_field("end_date"))
+            })
+            .transpose()?;
+        let before_or_on_end = end.is_none_or(|end_date| local_date <= end_date);
         let scheduled = if before_or_on_end {
             let cadence = cadence_from_revision(&revision.recurrence);
-            let end = revision
-                .end_date
-                .map(|value| {
-                    parse_civil_date(&value.to_string())
-                        .ok_or_else(|| invalid_schedule_field("end_date"))
-                })
-                .transpose()?;
             HabitSchedule::new(cadence, effective_from, end)
                 .map_err(|_| invalid_schedule_field("schedule bounds"))?
                 .period_for(local_date)
