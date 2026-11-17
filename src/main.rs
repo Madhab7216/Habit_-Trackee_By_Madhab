@@ -697,12 +697,6 @@ fn show_edit_window(
     habit_id: i64,
     current_name: &str,
 ) {
-    parent: &ApplicationWindow,
-    list: &ListBox,
-    state: &Rc<AppState>,
-    habit_id: i64,
-    current_name: &str,
-) {
     let editor = gtk::Window::builder()
         .title("Edit habit")
         .transient_for(parent)
