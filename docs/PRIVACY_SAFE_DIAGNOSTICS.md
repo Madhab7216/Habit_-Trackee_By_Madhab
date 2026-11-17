@@ -2,7 +2,7 @@
 
 ## Finding
 
-The GTK application and local data CLI previously formatted raw SQLite and filesystem errors directly into terminal output and, in one case, the Edit habit dialog. Underlying error strings may contain SQL details, invalid values, database filenames or absolute filesystem paths. This is unnecessary for the user-facing workflow and can leak local context if terminal output or screenshots are shared.
+The GTK application, Goals & Milestones UI and local data CLI previously formatted raw SQLite and filesystem errors directly into terminal output and edit dialogs. Underlying error strings may contain SQL details, invalid values, database filenames or absolute filesystem paths. This is unnecessary for the user-facing workflow and can leak local context if terminal output or screenshots are shared.
 
 ## Policy
 
@@ -16,7 +16,7 @@ The GTK application and local data CLI previously formatted raw SQLite and files
 
 `src/diagnostics.rs` classifies known SQLite and I/O failure kinds into a small vocabulary, including `database_busy`, `database_integrity`, `permission_denied`, `disk_full`, `constraint_violation`, `record_not_found` and generic fallback codes.
 
-GTK actions show static user messages and write safe operation/code pairs to stderr. The local data CLI uses the same classification and no longer prints raw error messages or supplied paths.
+GTK habit and goal/milestone actions show static user messages and write safe operation/code pairs to stderr. The local data CLI uses the same classification and no longer prints raw error messages or supplied paths. CLI success output also confirms completion without echoing the chosen absolute destination.
 
 ## Automated coverage
 
