@@ -270,10 +270,13 @@ def main() -> int:
         print("Observed controls: " + repr(items), file=sys.stderr)
         return 1
 
+    # Test ordinary focusable controls before opening the dropdown popover.
+    # GTK keeps the popover's option focused until it is dismissed, so the
+    # Schedule mnemonic is deliberately last in this ordered smoke sequence.
     mnemonic_checks = [
         ("h", "Habit name", {"text", "text box", "entry"}),
-        ("s", "Schedule", {"combo box", "drop down", "list"}),
         ("w", "Weekly target", {"spin button", "text"}),
+        ("s", "Schedule", {"combo box", "drop down", "list"}),
     ]
     for key, field_name, allowed_roles in mnemonic_checks:
         if not verify_mnemonic_focus(window, key, field_name, allowed_roles):
