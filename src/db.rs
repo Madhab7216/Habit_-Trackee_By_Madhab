@@ -1029,6 +1029,196 @@ mod tests {
         habit_id
     }
 
+    fn append_timezone_revision(
+        connection: &mut Connection,
+        habit_id: i64,
+        effective_from: &str,
+        time_zone_id: &str,
+    ) {
+        let effective_from = effective_from
+            .parse::<jiff::civil::Date>()
+            .expect("valid schedule effective date");
+        let revision = NewScheduleRevision {
+            effective_from,
+            end_date: None,
+            recurrence: Recurrence::Daily,
+            time_zone_id: time_zone_id.to_owned(),
+            change_reason: "Set the habit's IANA time zone".to_owned(),
+        };
+        crate::schedule_history::append_revision(
+            connection,
+            habit_id,
+            &revision,
+            effective_from,
+            PastEditConfirmation::NotConfirmed,
+        )
+        .expect("append timezone revision");
+    }
+
+    #[test]
+    fn today_uses_each_habits_own_iana_date_for_checkins_and_pause_history() {
+        let mut connection = memory_connection();
+        let kolkata_id = new_habit_with_schedule(
+            &connection,
+            "Kolkata habit",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        let los_angeles_id = new_habit_with_schedule(
+            &connection,
+            "Los Angeles habit",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        append_timezone_revision(
+            &mut connection,
+            kolkata_id,
+            "2026-11-10",
+            "Asia/Kolkata",
+        );
+        append_timezone_revision(
+            &mut connection,
+            los_angeles_id,
+            "2026-11-10",
+            "America/Los_Angeles",
+        );
+
+        let instant: Timestamp = "2026-11-17T18:30:00Z"
+            .parse()
+            .expect("valid deterministic instant");
+        let habits = today_habits_at(&connection, instant).expect("load per-zone Today");
+        let kolkata = habits.iter().find(|habit| habit.id == kolkata_id).unwrap();
+        let los_angeles = habits
+            .iter()
+            .find(|habit| habit.id == los_angeles_id)
+            .unwrap();
+
+        assert_eq!(kolkata.local_date, Some(date(2026, 11, 18)));
+        assert_eq!(kolkata.time_zone_id.as_deref(), Some("Asia/Kolkata"));
+        assert_eq!(los_angeles.local_date, Some(date(2026, 11, 17)));
+        assert_eq!(
+            los_angeles.time_zone_id.as_deref(),
+            Some("America/Los_Angeles")
+        );
+
+        set_today_completed_at(&connection, kolkata_id, true, instant)
+            .expect("save Kolkata check-in");
+        set_today_completed_at(&connection, los_angeles_id, true, instant)
+            .expect("save Los Angeles check-in");
+        let saved_dates: Vec<(i64, String)> = {
+            let mut statement = connection
+                .prepare("SELECT habit_id, local_date FROM habit_entries ORDER BY habit_id")
+                .expect("prepare saved-date query");
+            statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .expect("query saved dates")
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .expect("collect saved dates")
+        };
+        assert_eq!(
+            saved_dates,
+            vec![
+                (kolkata_id, "2026-11-18".to_owned()),
+                (los_angeles_id, "2026-11-17".to_owned())
+            ]
+        );
+
+        set_paused_at(&connection, kolkata_id, true, instant).expect("pause in Kolkata date");
+        let pause_start: String = connection
+            .query_row(
+                "SELECT starts_on FROM habit_pause_periods WHERE habit_id = ?1",
+                [kolkata_id],
+                |row| row.get(0),
+            )
+            .expect("read pause start");
+        assert_eq!(pause_start, "2026-11-18");
+
+        let resume_instant: Timestamp = "2026-11-18T18:30:00Z"
+            .parse()
+            .expect("valid resume instant");
+        set_paused_at(&connection, kolkata_id, false, resume_instant)
+            .expect("resume in Kolkata date");
+        let pause_end: String = connection
+            .query_row(
+                "SELECT ends_on FROM habit_pause_periods WHERE habit_id = ?1",
+                [kolkata_id],
+                |row| row.get(0),
+            )
+            .expect("read pause end");
+        assert_eq!(pause_end, "2026-11-19");
+    }
+
+    #[test]
+    fn future_timezone_revision_activates_at_midnight_in_its_own_zone() {
+        let mut connection = memory_connection();
+        let habit_id = new_habit_with_schedule(
+            &connection,
+            "Zone transition",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        append_timezone_revision(&mut connection, habit_id, "2026-11-02", "Asia/Kolkata");
+        append_timezone_revision(
+            &mut connection,
+            habit_id,
+            "2026-11-18",
+            "America/Los_Angeles",
+        );
+
+        let before: Timestamp = "2026-11-18T07:59:59Z"
+            .parse()
+            .expect("valid instant before Los Angeles midnight");
+        let after: Timestamp = "2026-11-18T08:00:00Z"
+            .parse()
+            .expect("valid instant at Los Angeles midnight");
+
+        let before_today = today_habits_at(&connection, before).expect("resolve old revision");
+        assert_eq!(before_today[0].time_zone_id.as_deref(), Some("Asia/Kolkata"));
+        assert_eq!(before_today[0].local_date, Some(date(2026, 11, 18)));
+
+        let after_today = today_habits_at(&connection, after).expect("resolve new revision");
+        assert_eq!(
+            after_today[0].time_zone_id.as_deref(),
+            Some("America/Los_Angeles")
+        );
+        assert_eq!(after_today[0].local_date, Some(date(2026, 11, 18)));
+    }
+
+    #[test]
+    fn legacy_unverified_schedule_uses_system_iana_zone_without_rewriting_history() {
+        let connection = memory_connection();
+        let habit_id = new_habit_with_schedule(
+            &connection,
+            "Legacy habit",
+            Cadence::Daily,
+            date(2026, 11, 1),
+            None,
+        );
+        let instant: Timestamp = "2026-11-17T18:30:00Z"
+            .parse()
+            .expect("valid deterministic instant");
+        let system_zone = IanaTimeZone::system().expect("CI system zone must be IANA");
+        let expected_date = parse_civil_date(&system_zone.local_date_at(instant).to_string())
+            .expect("system local date");
+
+        let habits = today_habits_at(&connection, instant).expect("resolve legacy zone");
+        assert_eq!(habits[0].id, habit_id);
+        assert_eq!(habits[0].local_date, Some(expected_date));
+        assert_eq!(habits[0].time_zone_id.as_deref(), Some(system_zone.id()));
+
+        let status: String = connection
+            .query_row(
+                "SELECT time_zone_status FROM habit_schedule_revisions WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("read legacy timezone status");
+        assert_eq!(status, "legacy_unverified");
+    }
+
     #[test]
     fn persisted_weekday_schedule_only_marks_selected_days() {
         let connection = memory_connection();
