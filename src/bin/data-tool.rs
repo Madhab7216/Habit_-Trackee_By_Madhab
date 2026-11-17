@@ -1,11 +1,11 @@
+#[path = "../diagnostics.rs"]
+pub mod diagnostics;
 #[path = "../db.rs"]
 pub mod db;
 #[path = "../domain.rs"]
 pub mod domain;
 #[path = "../portability.rs"]
 pub mod portability;
-#[path = "../diagnostics.rs"]
-pub mod diagnostics;
 
 use std::{env, error::Error, io, path::Path, process::ExitCode};
 
