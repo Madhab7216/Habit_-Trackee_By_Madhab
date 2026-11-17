@@ -238,8 +238,8 @@ pub fn today_habits(connection: &Connection) -> Result<Vec<TodayHabit>> {
 /// calendar/history views and avoids coupling schedule tests to the wall clock.
 pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<TodayHabit>> {
     let mut statement = connection.prepare(
-        "SELECT h.id, h.name, h.schedule_type, h.weekday_mask, h.interval_days,
-                h.target_per_period, h.start_date, h.end_date,
+        "SELECT h.id, h.name, r.schedule_type, r.weekday_mask, r.interval_days,
+                r.target_per_period, r.effective_from, r.end_date,
                 EXISTS (
                     SELECT 1 FROM habit_entries e
                     WHERE e.habit_id = h.id
@@ -253,26 +253,60 @@ pub fn habits_for_date(connection: &Connection, date: CivilDate) -> Result<Vec<T
                       AND (p.ends_on IS NULL OR ?1 < p.ends_on)
                 ) AS paused
          FROM habits h
+         LEFT JOIN habit_schedule_revisions r
+           ON r.id = (
+               SELECT candidate.id
+               FROM habit_schedule_revisions candidate
+               WHERE candidate.habit_id = h.id
+                 AND candidate.effective_from <= ?1
+                 AND NOT EXISTS (
+                     SELECT 1
+                     FROM habit_schedule_revisions later
+                     WHERE later.habit_id = candidate.habit_id
+                       AND later.effective_from > candidate.effective_from
+                       AND later.effective_from <= ?1
+                 )
+                 AND (candidate.end_date IS NULL OR candidate.end_date >= ?1)
+               ORDER BY candidate.effective_from DESC, candidate.revision_no DESC
+               LIMIT 1
+           )
          WHERE h.archived_at IS NULL
          ORDER BY h.sort_order, h.id",
     )?;
 
     let rows = statement.query_map([date.to_string()], |row| {
-        let cadence = cadence_from_row(row)?;
-        let start_date = civil_date_from_row(row, 6, "start_date")?;
-        let end_date = row
-            .get::<_, Option<String>>(7)?
-            .map(|value| parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("end_date")))
-            .transpose()?;
-        let schedule = HabitSchedule::new(cadence, start_date, end_date)
-            .map_err(|_| invalid_schedule_field("schedule bounds"))?;
+        let schedule_type: Option<String> = row.get(2)?;
+        let scheduled = if let Some(schedule_type) = schedule_type {
+            let cadence = cadence_from_values(
+                &schedule_type,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+            )?;
+            let start_date_text: Option<String> = row.get(6)?;
+            let start_date = start_date_text
+                .as_deref()
+                .and_then(parse_civil_date)
+                .ok_or_else(|| invalid_schedule_field("effective_from"))?;
+            let end_date = row
+                .get::<_, Option<String>>(7)?
+                .map(|value| {
+                    parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("end_date"))
+                })
+                .transpose()?;
+            let schedule = HabitSchedule::new(cadence, start_date, end_date)
+                .map_err(|_| invalid_schedule_field("schedule bounds"))?;
+            schedule.period_for(date).is_some()
+        } else {
+            false
+        };
 
         Ok(TodayHabit {
             id: row.get(0)?,
             name: row.get(1)?,
             completed: row.get::<_, i64>(8)? != 0,
             paused: row.get::<_, i64>(9)? != 0,
-            scheduled: schedule.period_for(date).is_some(),
+            scheduled,
         })
     })?;
     rows.collect()
@@ -284,27 +318,28 @@ fn local_today(connection: &Connection) -> Result<CivilDate> {
     parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("current local date"))
 }
 
-fn cadence_from_row(row: &rusqlite::Row<'_>) -> Result<Cadence> {
-    let schedule_type: String = row.get(2)?;
-    match schedule_type.as_str() {
+fn cadence_from_values(
+    schedule_type: &str,
+    raw_weekday_mask: Option<i64>,
+    raw_interval_days: Option<i64>,
+    raw_target_per_period: Option<i64>,
+) -> Result<Cadence> {
+    match schedule_type {
         "daily" => Ok(Cadence::Daily),
         "weekdays" => {
-            let raw: Option<i64> = row.get(3)?;
-            let weekday_mask = raw
+            let weekday_mask = raw_weekday_mask
                 .and_then(|value| u8::try_from(value).ok())
                 .ok_or_else(|| invalid_schedule_field("weekday_mask"))?;
             Ok(Cadence::Weekdays { weekday_mask })
         }
         "every_n_days" => {
-            let raw: Option<i64> = row.get(4)?;
-            let interval = raw
+            let interval = raw_interval_days
                 .and_then(|value| u16::try_from(value).ok())
                 .ok_or_else(|| invalid_schedule_field("interval_days"))?;
             Ok(Cadence::EveryNDays { interval })
         }
         "times_per_week" => {
-            let raw: Option<i64> = row.get(5)?;
-            let target = raw
+            let target = raw_target_per_period
                 .and_then(|value| u8::try_from(value).ok())
                 .ok_or_else(|| invalid_schedule_field("target_per_period"))?;
             Ok(Cadence::TimesPerWeek { target })
