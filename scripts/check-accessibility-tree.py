@@ -103,7 +103,7 @@ def send_mnemonic(key: str) -> None:
             "search",
             "--onlyvisible",
             "--name",
-            f"^{WINDOW_TITLE}$",
+            WINDOW_TITLE,
         ],
         check=True,
         capture_output=True,
@@ -112,12 +112,16 @@ def send_mnemonic(key: str) -> None:
     )
     window_ids = [line.strip() for line in search.stdout.splitlines() if line.strip()]
     if not window_ids:
-        raise RuntimeError(f"Could not find the X11 window {WINDOW_TITLE!r}")
+        raise RuntimeError(
+            f"Could not find the X11 window {WINDOW_TITLE!r}; "
+            f"xdotool search returned {search.stdout!r}"
+        )
 
-    # Search returns the matching top-level window. Focusing explicitly avoids
-    # relying on a window manager, which Xvfb does not start by default.
-    window_id = window_ids[-1]
-    subprocess.run(
+    # Explicitly focus the app because Xvfb does not start a window manager.
+    # Use XTEST key input, not xdotool's --window/XSendEvent path, which GTK
+    # does not treat as a real keyboard event.
+    window_id = window_ids[0]
+    focused = subprocess.run(
         ["xdotool", "windowfocus", "--sync", window_id],
         check=True,
         capture_output=True,
@@ -125,7 +129,7 @@ def send_mnemonic(key: str) -> None:
         timeout=5,
     )
     subprocess.run(
-        ["xdotool", "key", "--clearmodifiers", f"alt+{key}"],
+        ["xdotool", "key", "--clearmodifiers", "--delay", "100", f"alt+{key}"],
         check=True,
         capture_output=True,
         text=True,
@@ -142,11 +146,31 @@ def verify_mnemonic_focus(
         print(f"Could not send Alt+{key.upper()}: {error}", file=sys.stderr)
         return False
 
+    time.sleep(0.15)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if focused_control(window, field_name, roles) is not None:
             return True
         time.sleep(0.1)
+
+    current_focus = []
+    for node in walk_tree(window):
+        try:
+            states = node.get_state_set()
+            if states is not None and states.contains(Atspi.StateType.FOCUSED):
+                current_focus.append(
+                    (
+                        read_text(node, "get_role_name").lower(),
+                        read_text(node, "get_name"),
+                    )
+                )
+        except Exception:
+            continue
+    print(
+        f"Focus after Alt+{key.upper()}: {current_focus or 'no focused AT-SPI node'}; "
+        f"expected {field_name!r} with roles {sorted(roles)!r}",
+        file=sys.stderr,
+    )
     return False
 
 
