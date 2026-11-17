@@ -269,9 +269,8 @@ fn refresh_list(
             if let (Some(local_date), Some(time_zone_id)) =
                 (habit.local_date, habit.time_zone_id.as_deref())
             {
-                status.set_tooltip_text(Some(&format!(
-                    "Habit date: {local_date} ({time_zone_id})"
-                )));
+                status
+                    .set_tooltip_text(Some(&format!("Habit date: {local_date} ({time_zone_id})")));
             }
 
             let edit_button = Button::with_label("Edit");
