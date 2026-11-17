@@ -110,11 +110,15 @@ fn build_ui(application: &Application) {
     ]);
     tracking_picker.set_tooltip_text(Some("Choose a checkbox or a measured habit"));
     let direction_picker = gtk::DropDown::from_strings(&["At least", "At most"]);
-    direction_picker.set_tooltip_text(Some("At least = higher is better; At most = stay under a limit"));
+    direction_picker.set_tooltip_text(Some(
+        "At least = higher is better; At most = stay under a limit",
+    ));
     let target_input = SpinButton::with_range(0.1, 1_000_000.0, 0.1);
     target_input.set_value(1.0);
     target_input.set_digits(2);
-    target_input.set_tooltip_text(Some("Target value; zero targets are not supported by scoring v1"));
+    target_input.set_tooltip_text(Some(
+        "Target value; zero targets are not supported by scoring v1",
+    ));
     let unit_input = Entry::new();
     unit_input.set_placeholder_text(Some("Unit (ml, minutes, pages…)"));
     unit_input.set_width_chars(18);
@@ -207,32 +211,28 @@ fn build_ui(application: &Application) {
         };
 
         let result: Result<(), String> = match add_tracking.selected() {
-            0 => db::create_habit_with_cadence(
-                &add_state.connection.borrow(),
-                &name,
-                cadence,
-            )
-            .map_err(|error| error.to_string()),
+            0 => db::create_habit_with_cadence(&add_state.connection.borrow(), &name, cadence)
+                .map_err(|error| error.to_string()),
             1..=4 => {
                 let kind = match add_tracking.selected() {
-                    1 => measured_habits::MeasurementKind::Numeric,
-                    2 => measured_habits::MeasurementKind::Duration,
-                    3 => measured_habits::MeasurementKind::Count,
-                    4 => measured_habits::MeasurementKind::Limit,
+                    1 => measurable_habits::MeasurementKind::Numeric,
+                    2 => measurable_habits::MeasurementKind::Duration,
+                    3 => measurable_habits::MeasurementKind::Count,
+                    4 => measurable_habits::MeasurementKind::Limit,
                     _ => unreachable!("tracking type was range-checked"),
                 };
                 let direction = if add_tracking.selected() == 4 || add_direction.selected() == 1 {
-                    measured_habits::MeasurementDirection::AtMost
+                    measurable_habits::MeasurementDirection::AtMost
                 } else {
-                    measured_habits::MeasurementDirection::AtLeast
+                    measurable_habits::MeasurementDirection::AtLeast
                 };
-                let spec = measured_habits::MeasurementSpec {
+                let spec = measurable_habits::MeasurementSpec {
                     kind,
                     direction,
                     target: add_target.value(),
                     unit: add_unit.text().to_string(),
                 };
-                measured_habits::create_measurable_habit(
+                measurable_habits::create_measurable_habit(
                     &mut add_state.connection.borrow_mut(),
                     &name,
                     cadence,
@@ -344,12 +344,12 @@ fn refresh_list(
             row_content.append(&restore_button);
         } else {
             let measurement_config =
-                measured_habits::measurement_config(&state.connection.borrow(), habit.id).ok();
+                measurable_habits::measurement_config(&state.connection.borrow(), habit.id).ok();
             let measurement_date =
-                measured_habits::local_today_date(&state.connection.borrow()).ok();
+                measurable_habits::local_today_date(&state.connection.borrow()).ok();
             let measurement_record = if measurement_config.is_some() {
                 measurement_date.and_then(|date| {
-                    measured_habits::measurement_for_date(
+                    measurable_habits::measurement_for_date(
                         &state.connection.borrow(),
                         habit.id,
                         date,
@@ -368,8 +368,8 @@ fn refresh_list(
                 (measurement_config.as_ref(), measurement_record.as_ref())
             {
                 let state = match record.status {
-                    measured_habits::MeasurementStatus::Completed => "Completed",
-                    measured_habits::MeasurementStatus::Partial => "Partial",
+                    measurable_habits::MeasurementStatus::Completed => "Completed",
+                    measurable_habits::MeasurementStatus::Partial => "Partial",
                 };
                 format!("{state} · {} {}", record.actual, config.unit)
             } else if habit.completed {
@@ -397,11 +397,12 @@ fn refresh_list(
             });
 
             if let Some(config) = measurement_config {
-                let target_operator = if config.direction == measured_habits::MeasurementDirection::AtMost {
-                    "≤"
-                } else {
-                    "≥"
-                };
+                let target_operator =
+                    if config.direction == measurable_habits::MeasurementDirection::AtMost {
+                        "≤"
+                    } else {
+                        "≥"
+                    };
                 let target_label = Label::new(Some(&format!(
                     "Target {target_operator} {} {}",
                     config.target, config.unit
@@ -437,18 +438,18 @@ fn refresh_list(
                     let undo_list = list.clone();
                     let undo_parent = parent.clone();
                     let undo_habit_id = habit.id;
-                    undo_action.connect_clicked(move |_| {
-                        match measured_habits::local_today_date(&undo_state.connection.borrow())
-                            .and_then(|date| {
-                                measured_habits::undo_measurement_for_date(
-                                    &undo_state.connection.borrow(),
-                                    undo_habit_id,
-                                    date,
-                                )
-                            }) {
-                            Ok(_) => refresh_list(&undo_list, &undo_state, &undo_parent, false),
-                            Err(error) => eprintln!("Could not undo measurement: {error}"),
-                        }
+                    undo_action.connect_clicked(move |_| match measurable_habits::local_today_date(
+                        &undo_state.connection.borrow(),
+                    )
+                    .and_then(|date| {
+                        measurable_habits::undo_measurement_for_date(
+                            &undo_state.connection.borrow(),
+                            undo_habit_id,
+                            date,
+                        )
+                    }) {
+                        Ok(_) => refresh_list(&undo_list, &undo_state, &undo_parent, false),
+                        Err(error) => eprintln!("Could not undo measurement: {error}"),
                     });
                     row_content.append(&undo_action);
                 }
@@ -461,9 +462,11 @@ fn refresh_list(
                 let habit_id = habit.id;
                 let completed = habit.completed;
                 action.connect_clicked(move |_| {
-                    if let Err(error) =
-                        db::set_today_completed(&action_state.connection.borrow(), habit_id, !completed)
-                    {
+                    if let Err(error) = db::set_today_completed(
+                        &action_state.connection.borrow(),
+                        habit_id,
+                        !completed,
+                    ) {
                         eprintln!("Could not update habit: {error}");
                     }
                     refresh_list(&action_list, &action_state, &action_parent, false);
@@ -520,21 +523,23 @@ fn show_measurement_window(
     habit_name: &str,
 ) {
     let connection = state.connection.borrow();
-    let config = match measured_habits::measurement_config(&connection, habit_id) {
+    let config = match measurable_habits::measurement_config(&connection, habit_id) {
         Ok(config) => config,
         Err(error) => {
             eprintln!("Could not load measurement settings: {error}");
             return;
         }
     };
-    let date = match measured_habits::local_today_date(&connection) {
+    let date = match measurable_habits::local_today_date(&connection) {
         Ok(date) => date,
         Err(error) => {
             eprintln!("Could not read today's local date: {error}");
             return;
         }
     };
-    let saved = measured_habits::measurement_for_date(&connection, habit_id, date).ok().flatten();
+    let saved = measurable_habits::measurement_for_date(&connection, habit_id, date)
+        .ok()
+        .flatten();
     drop(connection);
 
     let editor = gtk::Window::builder()
@@ -551,7 +556,7 @@ fn show_measurement_window(
     content.set_margin_start(20);
     content.set_margin_end(20);
 
-    let operator = if config.direction == measured_habits::MeasurementDirection::AtMost {
+    let operator = if config.direction == measurable_habits::MeasurementDirection::AtMost {
         "≤"
     } else {
         "≥"
@@ -565,13 +570,13 @@ fn show_measurement_window(
 
     let value_label = Label::new(Some(&format!("Today's value ({})", config.unit)));
     value_label.set_xalign(0.0);
-    let step = if config.kind == measured_habits::MeasurementKind::Count {
+    let step = if config.kind == measurable_habits::MeasurementKind::Count {
         1.0
     } else {
         0.1
     };
     let value_input = SpinButton::with_range(0.0, 1_000_000_000.0, step);
-    value_input.set_digits(if config.kind == measured_habits::MeasurementKind::Count {
+    value_input.set_digits(if config.kind == measurable_habits::MeasurementKind::Count {
         0
     } else {
         2
@@ -617,7 +622,7 @@ fn show_measurement_window(
     let save_note = note_input.clone();
     let save_feedback = feedback.clone();
     save_button.connect_clicked(move |_| {
-        match measured_habits::record_measurement_for_date(
+        match measurable_habits::record_measurement_for_date(
             &save_state.connection.borrow(),
             habit_id,
             date,
@@ -626,8 +631,8 @@ fn show_measurement_window(
         ) {
             Ok(outcome) => {
                 let status = match outcome.status {
-                    measured_habits::MeasurementStatus::Completed => "Completed",
-                    measured_habits::MeasurementStatus::Partial => "Partial",
+                    measurable_habits::MeasurementStatus::Completed => "Completed",
+                    measurable_habits::MeasurementStatus::Partial => "Partial",
                 };
                 save_feedback.set_text(&format!(
                     "{status} · {:.0}% of target saved",
