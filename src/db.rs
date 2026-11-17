@@ -542,22 +542,37 @@ pub fn set_paused_at(
     }
 
     let date_text = today.local_date.to_string();
+    let open_start: Option<String> = connection
+        .query_row(
+            "SELECT starts_on FROM habit_pause_periods
+             WHERE habit_id = ?1 AND ends_on IS NULL",
+            [habit_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+
     if paused {
-        connection.execute(
-            "INSERT INTO habit_pause_periods(habit_id, starts_on)
-             SELECT ?1, ?2
-             WHERE NOT EXISTS (
-                 SELECT 1 FROM habit_pause_periods
-                 WHERE habit_id = ?1 AND ends_on IS NULL
-             )",
-            params![habit_id, date_text],
-        )?;
-    } else {
+        if open_start.is_none() {
+            connection.execute(
+                "INSERT INTO habit_pause_periods(habit_id, starts_on)
+                 VALUES (?1, ?2)",
+                params![habit_id, date_text],
+            )?;
+        }
+    } else if let Some(start_date) = open_start {
+        // A schedule timezone can move the civil date backwards while a pause is
+        // open. Keep the exclusive end boundary valid and let an explicit resume
+        // close the pause without creating an end date before its start date.
+        let end_date = if date_text < start_date {
+            start_date
+        } else {
+            date_text
+        };
         connection.execute(
             "UPDATE habit_pause_periods
              SET ends_on = ?2
              WHERE habit_id = ?1 AND ends_on IS NULL",
-            params![habit_id, date_text],
+            params![habit_id, end_date],
         )?;
     }
     Ok(())
@@ -1261,6 +1276,23 @@ mod tests {
         assert!(
             set_today_completed_at(&connection, habit_id, true, pause_instant).is_err(),
             "an open pause must continue to block check-ins across a zone change"
+        );
+
+        set_paused_at(&connection, habit_id, false, pause_instant)
+            .expect("resume after the active timezone moves the date backwards");
+        let pause_end: String = connection
+            .query_row(
+                "SELECT ends_on FROM habit_pause_periods WHERE habit_id = ?1",
+                [habit_id],
+                |row| row.get(0),
+            )
+            .expect("read closed pause boundary");
+        assert_eq!(pause_end, "2026-11-18");
+        let after_resume = today_habits_at(&connection, pause_instant)
+            .expect("load after explicit resume");
+        assert!(
+            !after_resume[0].paused,
+            "an explicit resume closes the pause even when the new zone's date is earlier"
         );
     }
 
