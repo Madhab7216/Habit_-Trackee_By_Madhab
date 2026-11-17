@@ -1,6 +1,7 @@
 pub mod db;
 pub mod domain;
 pub mod goals;
+pub mod diagnostics;
 
 use crate::domain::Cadence;
 use gtk::prelude::*;
@@ -29,7 +30,10 @@ fn build_ui(application: &Application) {
     let connection = match db::open() {
         Ok(connection) => connection,
         Err(error) => {
-            eprintln!("Could not open the local habit database: {error}");
+            eprintln!(
+                "{}",
+                diagnostics::format_diagnostic(diagnostics::Operation::OpenDatabase, &error)
+            );
             let window = ApplicationWindow::builder()
                 .application(application)
                 .title("Habit Trackers by Madhab")
@@ -183,7 +187,10 @@ fn build_ui(application: &Application) {
                 add_mode.set(false);
                 archive_button_for_add.set_label("View archived");
             }
-            Err(error) => eprintln!("Could not save habit: {error}"),
+            Err(error) => eprintln!(
+                "{}",
+                diagnostics::format_diagnostic(diagnostics::Operation::CreateHabit, &error)
+            ),
         }
         refresh_list(&add_list, &add_state, &add_parent, false);
     });
@@ -227,7 +234,11 @@ fn refresh_list(
     let habits = match habits {
         Ok(habits) => habits,
         Err(error) => {
-            append_message(list, &format!("Could not load habits: {error}"));
+            eprintln!(
+                "{}",
+                diagnostics::format_diagnostic(diagnostics::Operation::LoadHabits, &error)
+            );
+            append_message(list, diagnostics::Operation::LoadHabits.user_message());
             return;
         }
     };
@@ -267,7 +278,10 @@ fn refresh_list(
             restore_button.connect_clicked(move |_| {
                 if let Err(error) = db::restore_habit(&restore_state.connection.borrow(), habit_id)
                 {
-                    eprintln!("Could not restore habit: {error}");
+                    eprintln!(
+                        "{}",
+                        diagnostics::format_diagnostic(diagnostics::Operation::RestoreHabit, &error)
+                    );
                 }
                 refresh_list(&restore_list, &restore_state, &restore_parent, true);
             });
@@ -312,7 +326,10 @@ fn refresh_list(
                 if let Err(error) =
                     db::set_today_completed(&action_state.connection.borrow(), habit_id, !completed)
                 {
-                    eprintln!("Could not update habit: {error}");
+                    eprintln!(
+                        "{}",
+                        diagnostics::format_diagnostic(diagnostics::Operation::CompleteHabit, &error)
+                    );
                 }
                 refresh_list(&action_list, &action_state, &action_parent, false);
             });
@@ -327,7 +344,10 @@ fn refresh_list(
                 if let Err(error) =
                     db::set_paused(&pause_state.connection.borrow(), pause_habit_id, !paused)
                 {
-                    eprintln!("Could not change pause state: {error}");
+                    eprintln!(
+                        "{}",
+                        diagnostics::format_diagnostic(diagnostics::Operation::ChangePauseState, &error)
+                    );
                 }
                 refresh_list(&pause_list, &pause_state, &pause_parent, false);
             });
@@ -341,7 +361,10 @@ fn refresh_list(
                 if let Err(error) =
                     db::archive_habit(&archive_state.connection.borrow(), archive_habit_id)
                 {
-                    eprintln!("Could not archive habit: {error}");
+                    eprintln!(
+                        "{}",
+                        diagnostics::format_diagnostic(diagnostics::Operation::ArchiveHabit, &error)
+                    );
                 }
                 refresh_list(&archive_list, &archive_state, &archive_parent, false);
             });
@@ -418,7 +441,13 @@ fn show_edit_window(
                 save_editor.close();
                 refresh_list(&save_list, &save_state, &save_parent, false);
             }
-            Err(error) => save_feedback.set_text(&format!("Could not save habit: {error}")),
+            Err(error) => {
+                eprintln!(
+                    "{}",
+                    diagnostics::format_diagnostic(diagnostics::Operation::RenameHabit, &error)
+                );
+                save_feedback.set_text(diagnostics::Operation::RenameHabit.user_message());
+            }
         }
     });
 
