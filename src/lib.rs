@@ -4,3 +4,4 @@
 //! to GTK callbacks or SQLite query code.
 
 pub mod timezone;
+pub mod schedule_history;
