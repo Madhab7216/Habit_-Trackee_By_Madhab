@@ -257,21 +257,33 @@ impl fmt::Display for ScheduleHistoryError {
                 write!(formatter, "change reason must be at most 240 characters")
             }
             Self::EndBeforeStart => {
-                write!(formatter, "schedule end date cannot precede its effective date")
+                write!(
+                    formatter,
+                    "schedule end date cannot precede its effective date"
+                )
             }
             Self::DateBeforeHabitStart => {
                 write!(formatter, "a revision cannot start before the habit itself")
-            },
+            }
             Self::PastEditRequiresConfirmation => {
-                write!(formatter, "a past-effective schedule edit needs explicit confirmation")
+                write!(
+                    formatter,
+                    "a past-effective schedule edit needs explicit confirmation"
+                )
             }
             Self::DuplicateEffectiveDate => {
-                write!(formatter, "a schedule revision already exists for that effective date")
+                write!(
+                    formatter,
+                    "a schedule revision already exists for that effective date"
+                )
             }
             Self::HabitNotFound => write!(formatter, "habit was not found"),
             Self::HabitArchived => {
-                write!(formatter, "an archived habit cannot receive a new schedule revision")
-            },
+                write!(
+                    formatter,
+                    "an archived habit cannot receive a new schedule revision"
+                )
+            }
             Self::CorruptRevision => write!(formatter, "stored schedule revision is invalid"),
         }
     }
