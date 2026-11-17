@@ -535,6 +535,18 @@ pub fn revisions_for_habit(
     habit_id: i64,
 ) -> Result<Vec<ScheduleRevision>, ScheduleHistoryError> {
     initialize(connection)?;
+    revisions_for_habit_readonly(connection, habit_id)
+}
+
+/// Read schedule revisions without running migrations.
+///
+/// The application calls this after database initialization. It is intentionally
+/// read-only so Today/check-in code can resolve each habit's local date without
+/// needing a mutable SQLite borrow.
+pub fn revisions_for_habit_readonly(
+    connection: &Connection,
+    habit_id: i64,
+) -> Result<Vec<ScheduleRevision>, ScheduleHistoryError> {
     let mut statement = connection.prepare(
         "SELECT r.revision_no, r.effective_from,
                 (SELECT MIN(next.effective_from)
