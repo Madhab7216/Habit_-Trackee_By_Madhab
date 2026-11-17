@@ -2,7 +2,7 @@ use crate::domain::{Cadence, CivilDate, HabitSchedule};
 use crate::schedule_history::{Recurrence, TimeZoneStatus};
 use crate::timezone::IanaTimeZone;
 use jiff::Timestamp;
-use rusqlite::{Connection, Result, params};
+use rusqlite::{Connection, OptionalExtension, Result, params};
 use std::{env, fs, path::PathBuf};
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
@@ -125,7 +125,11 @@ pub fn create_habit_with_cadence(
     cadence: Cadence,
 ) -> Result<()> {
     let normalized = validate_habit_name(name)?;
-    let start_date = local_today(connection)?;
+    let system_zone = IanaTimeZone::system()
+        .map_err(|error| invalid_schedule_field(&format!("system time zone: {error}")))?;
+    let instant = Timestamp::now();
+    let start_date = parse_civil_date(&system_zone.local_date_at(instant).to_string())
+        .ok_or_else(|| invalid_schedule_field("system local date"))?;
     HabitSchedule::new(cadence, start_date, None)
         .map_err(|_| invalid_schedule_field("new schedule"))?;
 
@@ -159,8 +163,8 @@ pub fn create_habit_with_cadence(
     transaction.execute(
         "INSERT INTO habits
             (name, tracking_type, schedule_type, weekday_mask, interval_days,
-             target_per_period, period_unit, start_date)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'week', ?7)",
+             target_per_period, period_unit, start_date, time_zone_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'week', ?7, ?8)",
         params![
             normalized,
             tracking_type,
@@ -168,12 +172,17 @@ pub fn create_habit_with_cadence(
             weekday_mask,
             interval_days,
             target_per_period,
-            start_date.to_string()
+            start_date.to_string(),
+            system_zone.id()
         ],
     )?;
     let habit_id = transaction.last_insert_rowid();
-    crate::schedule_history::ensure_habit_baseline(&transaction, habit_id)
-        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    crate::schedule_history::ensure_habit_baseline_with_timezone(
+        &transaction,
+        habit_id,
+        system_zone.id(),
+    )
+    .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     transaction.commit()?;
     Ok(())
 }
@@ -460,12 +469,6 @@ fn cadence_from_revision(recurrence: &Recurrence) -> Cadence {
             target: *target_per_week,
         },
     }
-}
-
-fn local_today(connection: &Connection) -> Result<CivilDate> {
-    let value: String =
-        connection.query_row("SELECT date('now', 'localtime')", [], |row| row.get(0))?;
-    parse_civil_date(&value).ok_or_else(|| invalid_schedule_field("current local date"))
 }
 
 fn cadence_from_values(
@@ -769,6 +772,28 @@ mod tests {
                 1,
             )
         );
+    }
+
+    #[test]
+    fn newly_created_habits_capture_a_validated_system_iana_baseline() {
+        let connection = memory_connection();
+        let system_zone = IanaTimeZone::system().expect("system zone must be a known IANA zone");
+        create_habit(&connection, "New habit with timezone").expect("create new habit");
+
+        let stored: (String, String, String, String) = connection
+            .query_row(
+                "SELECT h.time_zone_id, r.time_zone_id, r.time_zone_status, r.source
+                 FROM habits h
+                 JOIN habit_schedule_revisions r ON r.habit_id = h.id
+                 WHERE h.name = 'New habit with timezone'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("read new habit baseline");
+        assert_eq!(stored.0, system_zone.id());
+        assert_eq!(stored.1, system_zone.id());
+        assert_eq!(stored.2, "validated_iana");
+        assert_eq!(stored.3, "user");
     }
 
     #[test]
