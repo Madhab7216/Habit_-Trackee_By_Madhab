@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 import time
 from collections import deque
@@ -78,6 +79,75 @@ def snapshot(window: object) -> list[tuple[str, str]]:
         )
         for node in walk_tree(window)
     ]
+
+
+def focused_control(window: object, name: str, roles: set[str]):
+    for node in walk_tree(window):
+        if read_text(node, "get_name") != name:
+            continue
+        if read_text(node, "get_role_name").lower() not in roles:
+            continue
+        try:
+            states = node.get_state_set()
+            if states is not None and states.contains(Atspi.StateType.FOCUSED):
+                return node
+        except Exception:
+            continue
+    return None
+
+
+def send_mnemonic(key: str) -> None:
+    search = subprocess.run(
+        [
+            "xdotool",
+            "search",
+            "--onlyvisible",
+            "--name",
+            f"^{WINDOW_TITLE}$",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    window_ids = [line.strip() for line in search.stdout.splitlines() if line.strip()]
+    if not window_ids:
+        raise RuntimeError(f"Could not find the X11 window {WINDOW_TITLE!r}")
+
+    # Search returns the matching top-level window. Focusing explicitly avoids
+    # relying on a window manager, which Xvfb does not start by default.
+    window_id = window_ids[-1]
+    subprocess.run(
+        ["xdotool", "windowfocus", "--sync", window_id],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    subprocess.run(
+        ["xdotool", "key", "--clearmodifiers", f"alt+{key}"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+
+def verify_mnemonic_focus(
+    window: object, key: str, field_name: str, roles: set[str], timeout: float = 3.0
+) -> bool:
+    try:
+        send_mnemonic(key)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+        print(f"Could not send Alt+{key.upper()}: {error}", file=sys.stderr)
+        return False
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if focused_control(window, field_name, roles) is not None:
+            return True
+        time.sleep(0.1)
+    return False
 
 
 def main() -> int:
@@ -157,10 +227,24 @@ def main() -> int:
         print("Observed controls: " + repr(items), file=sys.stderr)
         return 1
 
-    print("AT-SPI accessibility smoke test passed.")
+    mnemonic_checks = [
+        ("h", "Habit name", {"text", "text box", "entry"}),
+        ("s", "Schedule", {"combo box", "drop down", "list"}),
+        ("w", "Weekly target", {"spin button", "text"}),
+    ]
+    for key, field_name, allowed_roles in mnemonic_checks:
+        if not verify_mnemonic_focus(window, key, field_name, allowed_roles):
+            print(
+                f"Alt+{key.upper()} did not focus the {field_name!r} control.",
+                file=sys.stderr,
+            )
+            return 1
+
+    print("AT-SPI accessibility and keyboard mnemonic smoke test passed.")
     print("Accessible window: " + WINDOW_TITLE)
     print("Named buttons: " + ", ".join(sorted(EXPECTED_BUTTONS)))
     print("Named form controls: " + ", ".join(sorted(expected_fields)))
+    print("Keyboard focus: Alt+H, Alt+S and Alt+W reached their labelled controls.")
     print(f"Accessible objects inspected: {len(items)}")
     return 0
 
