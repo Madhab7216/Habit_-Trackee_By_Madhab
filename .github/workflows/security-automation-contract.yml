@@ -1,0 +1,29 @@
+name: Security automation contract
+
+on:
+  push:
+    branches:
+      - work/m11-codeql-dependabot
+  pull_request:
+    branches:
+      - work/linux-mint-habit-tracker-foundation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-automation-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test CodeQL and Dependabot configuration
+        run: python3 -m unittest discover -s tests -p 'test_security_automation.py' -v
